@@ -1,0 +1,11 @@
+# Srodowiska wirtualne (TEGO ABSOLUTNIE NIE WYSYLAMY)
+.venv/
+.venv_pc/
+
+# Pliki tymczasowe Pythona
+__pycache__/
+*.pyc
+
+# Wykresy (generują się same, nie musimy ich śledzić na serwerze)
+data/wykresy/
+*.png
