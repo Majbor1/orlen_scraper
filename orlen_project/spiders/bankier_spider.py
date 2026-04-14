@@ -34,6 +34,7 @@ class BankierSpider(scrapy.Spider):
         item = response.meta['item']
         if item['data'] < self.data_graniczna: return
 
-        akapity = response.css('div.article-content p::text, div#articleContainer p::text, section.article p::text').getall()
+        akapity = response.css('section.o-article-content p *::text, section.o-article-content p::text, div.article-content p::text, div#articleContainer p::text, section.article p::text').getall()
+        
         item['tresc'] = " ".join([p.strip() for p in akapity if p.strip()])
         yield item # Wysyła dane do pipelines.py!

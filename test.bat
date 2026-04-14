@@ -19,6 +19,9 @@ if exist ".venv_pc\Scripts\activate.bat" (
     exit /b 1
 )
 
+echo.
+echo [2.5/6] Czyszczenie i filtrowanie zeskrapowanych tekstow...
+python czyszczenie_danych.py
 
 echo.
 echo [3/6] Gemini czyta nowosci (tylko te jeszcze nieocenione!)...

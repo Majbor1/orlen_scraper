@@ -9,3 +9,9 @@ __pycache__/
 # Wykresy (generują się same, nie musimy ich śledzić na serwerze)
 data/wykresy/
 *.png
+
+# Zmienne srodowiskowe (Tajne klucze)
+.env
+
+# Ukrycie todo
+project-todos.json

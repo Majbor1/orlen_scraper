@@ -3,12 +3,12 @@ from google import genai
 import time
 import re
 import os
+from dotenv import load_dotenv
 
-# ==========================================
-KLUCZ_API = "AIzaSyBGumMOzqu1lApuIUBoW_1I2zOZDl4qD1A"
-# ==========================================
 
-client = genai.Client(api_key=KLUCZ_API)
+load_dotenv()
+
+client = genai.Client()
 
 print("🤖 Uruchamiam Sztuczną Inteligencję (Wersja Pancerna z zapisem w locie)...\n")
 
@@ -62,7 +62,7 @@ for index, row in df_do_oceny.iterrows():
         try:
             # UŻYWAMY WERSJI 2.0 (Limit to 1500 zapytań dziennie!)
             response = client.models.generate_content(
-                model='gemini-3.1-flash-lite-preview',
+                model='gemini-2.5-flash',
                 contents=probne_zapytanie,
             )
             wynik = response.text.strip()

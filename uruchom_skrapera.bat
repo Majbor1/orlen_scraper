@@ -30,6 +30,10 @@ python -m scrapy crawl pap_orlen
 python -m scrapy crawl tvn24_orlen
 
 echo.
+echo [2.5/6] Czyszczenie i filtrowanie zeskrapowanych tekstow...
+python czyszczenie_danych.py
+
+echo.
 echo [3/6] Gemini czyta nowosci (tylko te jeszcze nieocenione!)...
 python ocena_ai.py
 
