@@ -53,37 +53,39 @@ class HurtoweOrlenSpider(scrapy.Spider):
             })
 
     def closed(self, reason):
+        import pandas as pd # Importujemy tutaj, żeby nie obciążać startu pająka
         nazwa_pliku = 'data/ceny_orlen_zestawienie.csv'
-        istniejace_klucze = set()
+        
+        # 1. Tworzymy DataFrame z nowo pobranych danych
+        df_nowe = pd.DataFrame(self.zebrane_dane)
+        if df_nowe.empty:
+            self.logger.info("Brak nowych danych do zapisu.")
+            return
 
-        # 1. Zbieramy klucze z już istniejącego pliku (żeby uniknąć duplikatów przy dopisywaniu)
-        if os.path.isfile(nazwa_pliku):
-            with open(nazwa_pliku, mode='r', encoding='utf-8') as plik:
-                reader = csv.DictReader(plik)
-                for row in reader:
-                    istniejace_klucze.add((row['data'], row['paliwo']))
-
-        # 2. Wybieramy TYLKO te dane, których jeszcze nie ma w starym pliku
-        nowe_dane = []
-        for d in self.zebrane_dane:
-            klucz = (d['data'], d['paliwo'])
-            if klucz not in istniejace_klucze:
-                nowe_dane.append(d)
-                # Zapobiega duplikatom w samej nowej pobranej paczce
-                istniejace_klucze.add(klucz) 
-
-        # 3. Jeśli mamy coś nowego, dopisujemy na sam dół pliku (mode='a')
-        if nowe_dane:
-            plik_istnieje = os.path.isfile(nazwa_pliku)
-            with open(nazwa_pliku, mode='a', encoding='utf-8', newline='') as plik:
-                writer = csv.DictWriter(plik, fieldnames=['data', 'paliwo', 'cena_netto_pln_m3'])
-                
-                # Jeśli plik w ogóle nie istniał, najpierw dajemy nagłówki
-                if not plik_istnieje:
-                    writer.writeheader()
-                    
-                writer.writerows(nowe_dane)
-                
-            self.logger.info(f"✅ Dopisano {len(nowe_dane)} nowych rekordów do bazy.")
+        # 2. Wczytujemy starą bazę
+        if os.path.exists(nazwa_pliku):
+            df_stare = pd.read_csv(nazwa_pliku)
+            df_all = pd.concat([df_nowe, df_stare])
         else:
-            self.logger.info("ℹ️ Brak nowych cen. Baza jest aktualna.")
+            df_all = df_nowe
+
+        # 3. Czyścimy i formatujemy
+        df_all['data'] = pd.to_datetime(df_all['data'])
+        df_all = df_all.drop_duplicates(subset=['data', 'paliwo'], keep='first')
+
+        # 4. Uzpuełniamy braki (Forward Fill) dla każdego paliwa z osobna
+        df_final_lista = []
+        for paliwo in df_all['paliwo'].unique():
+            temp = df_all[df_all['paliwo'] == paliwo].set_index('data')
+            # Tworzymy ciągły zakres dat dla tego paliwa
+            daty = pd.date_range(start=temp.index.min(), end=temp.index.max(), freq='D')
+            temp = temp.reindex(daty).ffill().reset_index().rename(columns={'index': 'data'})
+            temp['paliwo'] = paliwo
+            df_final_lista.append(temp)
+
+        df_final = pd.concat(df_final_lista).sort_values('data', ascending=False)
+        df_final['data'] = df_final['data'].dt.strftime('%Y-%m-%d')
+        
+        # 5. Zapis
+        df_final.to_csv(nazwa_pliku, index=False)
+        self.logger.info(f"✅ Baza paliw zaktualizowana i uzupełniona (ffill).")
