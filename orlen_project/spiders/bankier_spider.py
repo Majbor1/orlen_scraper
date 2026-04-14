@@ -5,7 +5,7 @@ class BankierSpider(scrapy.Spider):
     name = "bankier_orlen"
     allowed_domains = ["bankier.pl"]
 
-    limit_czasowy = datetime.now() - timedelta(days=7)
+    limit_czasowy = datetime.now() - timedelta(days=3)
     data_graniczna = limit_czasowy.strftime("%Y-%m-%d")
     max_pages = 2
 

@@ -6,7 +6,7 @@ class PapSpider(scrapy.Spider):
     name = "pap_orlen"
     allowed_domains = ["pap.pl"]
 
-    limit_czasowy = datetime.now() - timedelta(days=366)
+    limit_czasowy = datetime.now() - timedelta(days=3)
     data_graniczna = limit_czasowy.strftime("%Y-%m-%d")
     max_pages = 2
 

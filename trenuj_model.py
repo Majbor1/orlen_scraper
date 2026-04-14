@@ -58,6 +58,9 @@ for i, paliwo in enumerate(paliwa, 1):
     plt.ylabel('Cena (PLN/m3)')
     plt.legend()
     plt.grid(True, alpha=0.3)
+    
+    # --- DODAJ TĘ LINIJKĘ: Wymusza pokazanie każdej daty i pochyla tekst o 45 stopni ---
+    plt.xticks(daty_testowe, daty_testowe.dt.strftime('%Y-%m-%d'), rotation=45, ha='right', fontsize=9)
 
 plt.tight_layout()
 dzis = datetime.now().strftime("%Y-%m-%d")
