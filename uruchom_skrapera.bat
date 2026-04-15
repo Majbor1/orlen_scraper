@@ -20,33 +20,37 @@ if exist ".venv_pc\Scripts\activate.bat" (
 )
 
 echo.
-echo [1/6] Pobieranie dzisiejszych cen hurtowych Orlen...
+echo [1/8] Pobieranie dzisiejszych cen hurtowych Orlen...
 python -m scrapy crawl hurtowe_orlen
 
 echo.
-echo [2/6] Pobieranie wiadomosci ze wszystkich portali...
+echo [2/8] Pobieranie ceny maksymalnej z Monitora Polskiego
+python -m scrapy crawl cena_max_mp
+
+echo.
+echo [3/8] Pobieranie wiadomosci ze wszystkich portali...
 python -m scrapy crawl bankier_orlen
 python -m scrapy crawl pap_orlen
 python -m scrapy crawl tvn24_orlen
 
 echo.
-echo [2.5/6] Czyszczenie i filtrowanie zeskrapowanych tekstow...
+echo [4/8] Czyszczenie i filtrowanie zeskrapowanych tekstow...
 python czyszczenie_danych.py
 
 echo.
-echo [3/6] Gemini czyta nowosci (tylko te jeszcze nieocenione!)...
+echo [5/8] Gemini czyta nowosci (tylko te jeszcze nieocenione!)...
 python ocena_ai.py
 
 echo.
-echo [4/6] Pobieram dzisiejsze zamkniecie gieldy (Ropa/USD)...
+echo [6/8] Pobieram dzisiejsze zamkniecie gieldy (Ropa/USD)...
 python gielda.py
 
 echo.
-echo [5/6] Aktualizuje Tabele Mistrzowska...
+echo [7/8] Aktualizuje Tabele Mistrzowska...
 python buduj_tabele.py
 
 echo.
-echo [6/6] Trenuje model AI na swiezych danych i rysuje wykres...
+echo [8/8] Trenuje model AI na swiezych danych i rysuje wykres...
 python trenuj_model.py
 
 echo.
@@ -57,6 +61,4 @@ echo =========================================
 :: Wychodzimy ze srodowiska
 call deactivate
 
-:: Zostawiam PAUSE, zebys mogl przeczytac wyniki (blad MAE) zanim okno zniknie!
-:: Jak juz wszystko bedzie dzialac idealnie, mozesz usunac slowo 'pause'.
 pause
