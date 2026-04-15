@@ -50,6 +50,8 @@ numpy==2.4.3
 packaging==26.0
 pandas==3.0.1
 parsel==1.11.0
+pdfminer-six==20251230
+pdfplumber==0.11.9
 peewee==4.0.4
 pillow==12.2.0
 platformdirs==4.9.6
@@ -67,6 +69,7 @@ pyee==13.0.1
 pygments==2.20.0
 pyopenssl==26.0.0
 pyparsing==3.3.2
+pypdfium2==5.7.0
 pyqt5==5.15.11
 pyqt5-qt5==5.15.2
 pyqt5-sip==12.18.0

@@ -102,3 +102,10 @@ PLAYWRIGHT_LAUNCH_OPTIONS = {
 ITEM_PIPELINES = {
    "orlen_project.pipelines.NewsMergePipeline": 300, 
 }
+
+import logging
+
+# Uciszamy gigantyczny spam w konsoli
+logging.getLogger('pdfminer').setLevel(logging.WARNING)
+logging.getLogger('asyncio').setLevel(logging.INFO)
+logging.getLogger('scrapy_playwright').setLevel(logging.INFO)
