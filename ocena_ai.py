@@ -5,12 +5,26 @@ import re
 import os
 from dotenv import load_dotenv
 
-
 load_dotenv()
 
-client = genai.Client()
+# --- ZMIANA: Obsługa dwóch kluczy ---
+klucze_api = [
+    os.getenv("GEMINI_API_KEY_1"),
+    os.getenv("GEMINI_API_KEY_2")
+]
+# Pancerny filtr: usuwa puste teksty ("") oraz niewidoczne spacje (.strip())
+klucze_api = [k.strip() for k in klucze_api if k and k.strip()]
+
+if not klucze_api:
+    print("❌ Błąd! Nie znaleziono żadnych poprawnych kluczy (GEMINI_API_KEY_1 / GEMINI_API_KEY_2) w pliku .env.")
+    exit()
+
+aktualny_indeks_klucza = 0
+client = genai.Client(api_key=klucze_api[aktualny_indeks_klucza])
+# ------------------------------------
 
 print("🤖 Uruchamiam Sztuczną Inteligencję (Wersja Pancerna z zapisem w locie)...\n")
+print(f"🔑 Załadowano {len(klucze_api)} kluczy API. Startuję na Głównym [0].\n")
 
 plik_czyste = 'data/wiadomosci_orlen_CZYSTE.csv'
 plik_ocenione = 'data/wiadomosci_orlen_Ocenione_AI.csv'
@@ -25,6 +39,18 @@ except FileNotFoundError:
 # Sprawdzamy, co już mamy ocenione
 if os.path.exists(plik_ocenione):
     df_historia = pd.read_csv(plik_ocenione, encoding='utf-8-sig')
+    
+    # --- ZMIANA: SORTUJEMY PLIK OD RAZU PO WCZYTANIU ---
+    if 'data' in df_historia.columns:
+        # Zabezpieczamy format daty
+        df_historia['temp_sort_date'] = pd.to_datetime(df_historia['data'], errors='coerce')
+        # Sortujemy malejąco (najnowsze u góry), a błędy wrzucamy na dół
+        df_historia = df_historia.sort_values(by='temp_sort_date', ascending=False, na_position='last')
+        df_historia = df_historia.drop(columns=['temp_sort_date'])
+        # Zapisujemy idealnie ułożony plik z powrotem na dysk
+        df_historia.to_csv(plik_ocenione, index=False, encoding='utf-8-sig')
+    # ---------------------------------------------------
+    
     ocenione_linki = df_historia['link'].tolist()
 else:
     df_historia = pd.DataFrame()
@@ -34,7 +60,7 @@ else:
 df_do_oceny = df_nowe[~df_nowe['link'].isin(ocenione_linki)].copy()
 
 if len(df_do_oceny) == 0:
-    print("✅ Baza AI jest aktualna! Wszystkie artykuły zostały już ocenione.")
+    print("✅ Baza AI jest aktualna! (Plik został sprawdzony i posortowany chronologicznie).")
     exit()
 
 print(f"⏳ Zostało do oceny: {len(df_do_oceny)} artykułów. Używamy stabilnego modelu 2.0...\n")
@@ -60,9 +86,9 @@ for index, row in df_do_oceny.iterrows():
     
     while not sukces:
         try:
-            # UŻYWAMY WERSJI 2.0 (Limit to 1500 zapytań dziennie!)
+            # UŻYWAMY WERSJI 2.0 (Model Flash Lite - najszybszy do tego typu zadań)
             response = client.models.generate_content(
-                model='gemini-2.5-flash',
+                model='gemini-2.5-flash-lite',
                 contents=probne_zapytanie,
             )
             wynik = response.text.strip()
@@ -81,8 +107,16 @@ for index, row in df_do_oceny.iterrows():
             nowy_wiersz['panika_ai'] = czesc_panika
             nowy_wiersz['sukces_ai'] = czesc_sukces
             
-            # Dodajemy oceniony wiersz do historii i natychmiast zapisujemy na dysk
+            # Dodajemy oceniony wiersz do historii
             df_historia = pd.concat([df_historia, pd.DataFrame([nowy_wiersz])], ignore_index=True)
+            
+            # Ponawiamy sortowanie przy dopisywaniu nowego wiersza, żeby wpadł we właściwe miejsce
+            if 'data' in df_historia.columns:
+                df_historia['temp_sort_date'] = pd.to_datetime(df_historia['data'], errors='coerce')
+                df_historia = df_historia.sort_values(by='temp_sort_date', ascending=False, na_position='last')
+                df_historia = df_historia.drop(columns=['temp_sort_date'])
+
+            # Zapisujemy na dysk
             df_historia.to_csv(plik_ocenione, index=False, encoding='utf-8-sig')
             
             sukces = True 
@@ -90,10 +124,19 @@ for index, row in df_do_oceny.iterrows():
             
         except Exception as e:
             blad_txt = str(e)
-            #print(f"🔍 PEŁNY BŁĄD OD GOOGLE: {blad_txt}")
-            if '429' in blad_txt or 'RESOURCE_EXHAUSTED' in blad_txt:
-                print("🚦 Chwilowy limit częstotliwości (RPM). Czekam 45 sekund...")
-                time.sleep(45)
+            if '429' in blad_txt or 'RESOURCE_EXHAUSTED' in blad_txt or 'API_KEY_INVALID' in blad_txt:
+                
+                # --- Rotacja kluczy przy wyczerpaniu limitu ---
+                if aktualny_indeks_klucza < len(klucze_api) - 1:
+                    aktualny_indeks_klucza += 1
+                    print(f"\n🔄 Wyczerpano limit lub podano błędny klucz. Przełączam na klucz zapasowy [{aktualny_indeks_klucza}]...")
+                    client = genai.Client(api_key=klucze_api[aktualny_indeks_klucza])
+                    time.sleep(2) 
+                else:
+                    print("🚦 Wszystkie klucze osiągnęły limit częstotliwości (RPM). Czekam 45 sekund...")
+                    time.sleep(5)
+                # --------------------------------------------------------
+                
             else:
                 print(f"❌ Inny błąd: {blad_txt}")
                 break
