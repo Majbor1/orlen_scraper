@@ -14,7 +14,7 @@ def uruchom_kalkulator(marza_pb95=0.15, marza_on=0.15):
 
     plik_hurt = 'data/orlen_master_table.csv' 
     plik_max = 'data/cena_max.csv'
-    plik_wynik = 'data/ceny_na_stacjach_wolny_rynek.csv'
+    plik_wynik = 'data/ceny_na_stacjach.csv'
 
     if not os.path.exists(plik_hurt):
         print(f"❌ Brak pliku z cenami hurtowymi!")
@@ -60,7 +60,7 @@ def uruchom_kalkulator(marza_pb95=0.15, marza_on=0.15):
     df['pylon'] = df['pylon'].round(2)
 
     df_wynik = df[['data', 'paliwo', 'cena_dzis', 'stawka_vat', 'pylon', 'minister_max']].copy()
-    df_wynik = df_wynik.sort_values('data', ascending=False)
+    #df_wynik = df_wynik.sort_values('data', ascending=False)
     df_wynik['data'] = df_wynik['data'].dt.strftime('%Y-%m-%d')
     df_wynik.to_csv(plik_wynik, index=False)
     
