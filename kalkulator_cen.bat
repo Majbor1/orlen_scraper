@@ -20,28 +20,12 @@ if exist ".venv_pc\Scripts\activate.bat" (
 )
 
 echo.
-echo [2/8] Pobieranie ceny maksymalnej z Monitora Polskiego
+echo [2/3] Pobieranie ceny maksymalnej z Monitora Polskiego
 python -m scrapy crawl cena_max_mp
 
 echo.
-echo [4/8] Czyszczenie i filtrowanie zeskrapowanych tekstow...
-python czyszczenie_danych.py
-
-echo.
-echo [5/8] Gemini czyta nowosci (tylko te jeszcze nieocenione!)...
-python ocena_ai.py
-
-echo.
-echo [6/8] Pobieram dzisiejsze zamkniecie gieldy (Ropa/USD)...
-python gielda.py
-
-echo.
-echo [7/8] Aktualizuje Tabele Mistrzowska...
-python buduj_tabele.py
-
-echo.
-echo [8/8] Trenuje model AI na swiezych danych i rysuje wykres...
-python trenuj_model.py
+echo [2/3] Trenuje model AI na swiezych danych i rysuje wykres...
+python kalkulator_detaliczny.py
 
 echo.
 echo =========================================

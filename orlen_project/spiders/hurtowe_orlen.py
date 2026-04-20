@@ -53,7 +53,8 @@ class HurtoweOrlenSpider(scrapy.Spider):
             })
 
     def closed(self, reason):
-        import pandas as pd # Importujemy tutaj, żeby nie obciążać startu pająka
+        import pandas as pd
+        # Używamy datetime (masz już zaimportowane na górze pliku)
         nazwa_pliku = 'data/ceny_orlen_zestawienie.csv'
         
         # 1. Tworzymy DataFrame z nowo pobranych danych
@@ -73,19 +74,29 @@ class HurtoweOrlenSpider(scrapy.Spider):
         df_all['data'] = pd.to_datetime(df_all['data'])
         df_all = df_all.drop_duplicates(subset=['data', 'paliwo'], keep='first')
 
-        # 4. Uzpuełniamy braki (Forward Fill) dla każdego paliwa z osobna
+        # ===============================================================
+        # 4. UZupełniamy braki (Forward Fill) z wymuszonym kalendarzem
+        # ===============================================================
         df_final_lista = []
+        
+        # ZMIANA: Ustalamy "twardy" koniec kalendarza na dzisiejszy dzień
+        data_koniec = pd.Timestamp(datetime.now().date())
+        
         for paliwo in df_all['paliwo'].unique():
             temp = df_all[df_all['paliwo'] == paliwo].set_index('data')
-            # Tworzymy ciągły zakres dat dla tego paliwa
-            daty = pd.date_range(start=temp.index.min(), end=temp.index.max(), freq='D')
+            
+            # Tworzymy ciągły zakres dat od pierwszej znanej daty aż do DZISIAJ
+            # Jeśli Orlen milczy od soboty, Pandas wygeneruje puste pola dla niedzieli i poniedziałku
+            daty = pd.date_range(start=temp.index.min(), end=data_koniec, freq='D')
+            
+            # Wypełniamy luki starą ceną, wyciągamy datę z indeksu i naprawiamy kolumny
             temp = temp.reindex(daty).ffill().reset_index().rename(columns={'index': 'data'})
             temp['paliwo'] = paliwo
             df_final_lista.append(temp)
 
+        # 5. Łączymy wszystkie paliwa, sortujemy od najnowszego i zapisujemy
         df_final = pd.concat(df_final_lista).sort_values('data', ascending=False)
         df_final['data'] = df_final['data'].dt.strftime('%Y-%m-%d')
         
-        # 5. Zapis
         df_final.to_csv(nazwa_pliku, index=False)
-        self.logger.info(f"✅ Baza paliw zaktualizowana i uzupełniona (ffill).")
+        self.logger.info(f"✅ Baza paliw zaktualizowana i uzupełniona (ffill) aż do dnia dzisiejszego.")
