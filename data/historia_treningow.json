@@ -1,5 +1,125 @@
 [
     {
+        "data_treningu": "2026-04-21 17:38:06",
+        "wyniki": {
+            "ONEkodiesel": {
+                "mae": 161.32,
+                "prognoza_na_jutro": 5888.84,
+                "wplyw_cech": {
+                    "cena_dzis": 38.9,
+                    "panika_ai": 0.3,
+                    "sukces_ai": 0.3,
+                    "ropa_brent_usd": 32.0,
+                    "usd_pln": 28.4
+                }
+            },
+            "Pb98": {
+                "mae": 71.53,
+                "prognoza_na_jutro": 5664.64,
+                "wplyw_cech": {
+                    "cena_dzis": 45.8,
+                    "szum_medialny": 0.3,
+                    "panika_ai": 0.2,
+                    "sukces_ai": 0.3,
+                    "ropa_brent_usd": 45.2,
+                    "usd_pln": 8.2
+                }
+            },
+            "Pb95": {
+                "mae": 71.09,
+                "prognoza_na_jutro": 5152.26,
+                "wplyw_cech": {
+                    "cena_dzis": 46.1,
+                    "szum_medialny": 0.3,
+                    "panika_ai": 0.2,
+                    "sukces_ai": 0.3,
+                    "ropa_brent_usd": 44.8,
+                    "usd_pln": 8.3
+                }
+            }
+        }
+    },
+    {
+        "data_treningu": "2026-04-21 17:32:18",
+        "wyniki": {
+            "ONEkodiesel": {
+                "mae": 161.32,
+                "prognoza_na_jutro": 5888.84,
+                "wplyw_cech": {
+                    "cena_dzis": 38.9,
+                    "panika_ai": 0.3,
+                    "sukces_ai": 0.3,
+                    "ropa_brent_usd": 32.0,
+                    "usd_pln": 28.4
+                }
+            },
+            "Pb98": {
+                "mae": 71.53,
+                "prognoza_na_jutro": 5664.64,
+                "wplyw_cech": {
+                    "cena_dzis": 45.8,
+                    "szum_medialny": 0.3,
+                    "panika_ai": 0.2,
+                    "sukces_ai": 0.3,
+                    "ropa_brent_usd": 45.2,
+                    "usd_pln": 8.2
+                }
+            },
+            "Pb95": {
+                "mae": 71.09,
+                "prognoza_na_jutro": 5152.26,
+                "wplyw_cech": {
+                    "cena_dzis": 46.1,
+                    "szum_medialny": 0.3,
+                    "panika_ai": 0.2,
+                    "sukces_ai": 0.3,
+                    "ropa_brent_usd": 44.8,
+                    "usd_pln": 8.3
+                }
+            }
+        }
+    },
+    {
+        "data_treningu": "2026-04-21 17:28:11",
+        "wyniki": {
+            "ONEkodiesel": {
+                "mae": 161.32,
+                "prognoza_na_jutro": 5888.84,
+                "wplyw_cech": {
+                    "cena_dzis": 38.9,
+                    "panika_ai": 0.3,
+                    "sukces_ai": 0.3,
+                    "ropa_brent_usd": 32.0,
+                    "usd_pln": 28.4
+                }
+            },
+            "Pb98": {
+                "mae": 71.53,
+                "prognoza_na_jutro": 5664.64,
+                "wplyw_cech": {
+                    "cena_dzis": 45.8,
+                    "szum_medialny": 0.3,
+                    "panika_ai": 0.2,
+                    "sukces_ai": 0.3,
+                    "ropa_brent_usd": 45.2,
+                    "usd_pln": 8.2
+                }
+            },
+            "Pb95": {
+                "mae": 71.09,
+                "prognoza_na_jutro": 5152.26,
+                "wplyw_cech": {
+                    "cena_dzis": 46.1,
+                    "szum_medialny": 0.3,
+                    "panika_ai": 0.2,
+                    "sukces_ai": 0.3,
+                    "ropa_brent_usd": 44.8,
+                    "usd_pln": 8.3
+                }
+            }
+        }
+    },
+    {
         "data_treningu": "2026-04-21 16:54:32",
         "wyniki": {
             "ONEkodiesel": {
