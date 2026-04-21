@@ -1,14 +1,31 @@
 import scrapy
 from datetime import datetime, timedelta
 from scrapy_playwright.page import PageMethod
+import os
+import pandas as pd
 
 class PapSpider(scrapy.Spider):
     name = "pap_orlen"
     allowed_domains = ["pap.pl"]
-
-    limit_czasowy = datetime.now() - timedelta(days=3)
-    data_graniczna = limit_czasowy.strftime("%Y-%m-%d")
     max_pages = 2
+
+    def __init__(self, *args, **kwargs):
+        super(PapSpider, self).__init__(*args, **kwargs)
+        self.data_graniczna = self.wyznacz_date_graniczna()
+
+    def wyznacz_date_graniczna(self):
+        plik = 'data/wiadomosci_orlen_zestawienie.csv'
+        if os.path.exists(plik):
+            try:
+                df = pd.read_csv(plik)
+                df_zrodlo = df[df['zrodlo'] == 'PAP']
+                if not df_zrodlo.empty and 'data' in df_zrodlo.columns:
+                    ostatnia_data = pd.to_datetime(df_zrodlo['data']).max()
+                    self.logger.info(f"📅 Ostatnia data w bazie (PAP): {ostatnia_data.strftime('%Y-%m-%d')}")
+                    return ostatnia_data.strftime('%Y-%m-%d')
+            except Exception as e:
+                self.logger.warning(f"Błąd odczytu CSV: {e}")
+        return (datetime.now() - timedelta(days=3)).strftime("%Y-%m-%d")
 
     def start_requests(self):
         yield scrapy.Request(

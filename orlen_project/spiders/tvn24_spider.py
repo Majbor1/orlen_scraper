@@ -1,13 +1,30 @@
 import scrapy
 from datetime import datetime, timedelta
 from scrapy_playwright.page import PageMethod
+import os
+import pandas as pd
 
 class Tvn24Spider(scrapy.Spider):
     name = "tvn24_orlen"
     allowed_domains = ["tvn24.pl"]
 
-    limit_czasowy = datetime.now() - timedelta(days=3)
-    data_graniczna = limit_czasowy.strftime("%Y-%m-%d")
+    def __init__(self, *args, **kwargs):
+        super(Tvn24Spider, self).__init__(*args, **kwargs)
+        self.data_graniczna = self.wyznacz_date_graniczna()
+
+    def wyznacz_date_graniczna(self):
+        plik = 'data/wiadomosci_orlen_zestawienie.csv'
+        if os.path.exists(plik):
+            try:
+                df = pd.read_csv(plik)
+                df_zrodlo = df[df['zrodlo'] == 'TVN24']
+                if not df_zrodlo.empty and 'data' in df_zrodlo.columns:
+                    ostatnia_data = pd.to_datetime(df_zrodlo['data']).max()
+                    self.logger.info(f"📅 Ostatnia data w bazie (TVN24): {ostatnia_data.strftime('%Y-%m-%d')}")
+                    return ostatnia_data.strftime('%Y-%m-%d')
+            except Exception as e:
+                self.logger.warning(f"Błąd odczytu CSV: {e}")
+        return (datetime.now() - timedelta(days=3)).strftime("%Y-%m-%d")
 
     def start_requests(self):
         yield scrapy.Request(
@@ -23,7 +40,6 @@ class Tvn24Spider(scrapy.Spider):
         )
 
     def parse_tvn24(self, response):
-        # Usunięta paginacja, pobieramy tylko bieżącą stronę (ok. 20 najnowszych artykułów)
         czyste_linki = set()
         for link in response.css('a::attr(href)').getall():
             if link and '-st' in link and link[-1].isdigit():

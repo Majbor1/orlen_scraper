@@ -1,144 +1,90 @@
 import pandas as pd
 from google import genai
 import time
-import re
+import json
 import os
 from dotenv import load_dotenv
 
 load_dotenv()
 
-# --- ZMIANA: Obsługa dwóch kluczy ---
-klucze_api = [
-    os.getenv("GEMINI_API_KEY_1"),
-    os.getenv("GEMINI_API_KEY_2")
-]
-# Pancerny filtr: usuwa puste teksty ("") oraz niewidoczne spacje (.strip())
+klucze_api = [os.getenv("GEMINI_API_KEY_1"), os.getenv("GEMINI_API_KEY_2")]
 klucze_api = [k.strip() for k in klucze_api if k and k.strip()]
 
 if not klucze_api:
-    print("❌ Błąd! Nie znaleziono żadnych poprawnych kluczy (GEMINI_API_KEY_1 / GEMINI_API_KEY_2) w pliku .env.")
+    print("❌ Błąd! Brak kluczy API.")
     exit()
 
-aktualny_indeks_klucza = 0
-client = genai.Client(api_key=klucze_api[aktualny_indeks_klucza])
-# ------------------------------------
+client = genai.Client(api_key=klucze_api[0])
 
-print("🤖 Uruchamiam Sztuczną Inteligencję (Wersja Pancerna z zapisem w locie)...\n")
-print(f"🔑 Załadowano {len(klucze_api)} kluczy API. Startuję na Głównym [0].\n")
+print("🤖 Uruchamiam zoptymalizowaną analizę AI (Grupowanie wiadomości)...")
 
 plik_czyste = 'data/wiadomosci_orlen_CZYSTE.csv'
 plik_ocenione = 'data/wiadomosci_orlen_Ocenione_AI.csv'
 
-# Wczytujemy zeskrapowane artykuły
 try:
     df_nowe = pd.read_csv(plik_czyste, encoding='utf-8-sig')
 except FileNotFoundError:
     print("❌ Brak pliku z czystymi artykułami.")
     exit()
 
-# Sprawdzamy, co już mamy ocenione
 if os.path.exists(plik_ocenione):
     df_historia = pd.read_csv(plik_ocenione, encoding='utf-8-sig')
-    
-    # --- ZMIANA: SORTUJEMY PLIK OD RAZU PO WCZYTANIU ---
-    if 'data' in df_historia.columns:
-        # Zabezpieczamy format daty
-        df_historia['temp_sort_date'] = pd.to_datetime(df_historia['data'], errors='coerce')
-        # Sortujemy malejąco (najnowsze u góry), a błędy wrzucamy na dół
-        df_historia = df_historia.sort_values(by='temp_sort_date', ascending=False, na_position='last')
-        df_historia = df_historia.drop(columns=['temp_sort_date'])
-        # Zapisujemy idealnie ułożony plik z powrotem na dysk
-        df_historia.to_csv(plik_ocenione, index=False, encoding='utf-8-sig')
-    # ---------------------------------------------------
-    
     ocenione_linki = df_historia['link'].tolist()
 else:
     df_historia = pd.DataFrame()
     ocenione_linki = []
 
-# Bierzemy TYLKO te artykuły, których jeszcze nie ocenialiśmy
 df_do_oceny = df_nowe[~df_nowe['link'].isin(ocenione_linki)].copy()
 
 if len(df_do_oceny) == 0:
-    print("✅ Baza AI jest aktualna! (Plik został sprawdzony i posortowany chronologicznie).")
+    print("✅ Baza AI jest aktualna!")
     exit()
 
-print(f"⏳ Zostało do oceny: {len(df_do_oceny)} artykułów. Używamy stabilnego modelu 2.0...\n")
+# Dzielimy artykuły na paczki po 3 sztuki, żeby oszczędzać zapytania API
+rozmiar_paczki = 3
+paczki = [df_do_oceny.iloc[i:i + rozmiar_paczki] for i in range(0, len(df_do_oceny), rozmiar_paczki)]
 
 prompt_bazowy = """
-Jesteś profesjonalnym analitykiem giełdowym sektora paliwowego. Przeczytaj poniższy artykuł o firmie Orlen.
-Zrozum jego kontekst i oceń w skali od 0 do 10 (tylko liczby całkowite):
-1. Poziom 'Paniki' (straty, problemy, awarie, spadki cen, afery, ryzyko inwestycyjne).
-2. Poziom 'Sukcesu' (zyski, udane fuzje, zielona energia, rozwój, dobre prognozy).
+Oceń sentyment poniższych artykułów o firmie Orlen w skali od 0 do 10 dla dwóch kategorii:
+1. 'panika' (problemy, awarie, spadki)
+2. 'sukces' (zyski, inwestycje).
 
-Zwróć odpowiedź DOKŁADNIE w takim formacie i nic więcej:
-Panika: [liczba], Sukces: [liczba]
+Zwróć odpowiedź TYLKO w formacie JSON (tablica obiektów, w tej samej kolejności co podane teksty).
+Przykład: [{"panika": 2, "sukces": 8}, {"panika": 9, "sukces": 1}]
 
-Oto tekst do analizy:
+Teksty do analizy:
 """
 
-for index, row in df_do_oceny.iterrows():
-    tekst = str(row['tytul']) + "\n" + str(row['tresc'])
-    tekst = tekst[:3500] 
-    probne_zapytanie = prompt_bazowy + tekst
+for paczka in paczki:
+    teksty = ""
+    for i, row in paczka.iterrows():
+        teksty += f"--- TEKST {i} ---\n{str(row['tytul'])} {str(row['tresc'])[:1000]}\n\n"
     
-    sukces = False
+    zapytanie = prompt_bazowy + teksty
     
-    while not sukces:
-        try:
-            # UŻYWAMY WERSJI 2.0 (Model Flash Lite - najszybszy do tego typu zadań)
-            response = client.models.generate_content(
-                model='gemini-2.5-flash-lite',
-                contents=probne_zapytanie,
-            )
-            wynik = response.text.strip()
-            
-            panika_match = re.search(r'Panika.*?(\d+)', wynik, re.IGNORECASE)
-            sukces_match = re.search(r'Sukces.*?(\d+)', wynik, re.IGNORECASE)
-            
-            czesc_panika = int(panika_match.group(1)) if panika_match else 0
-            czesc_sukces = int(sukces_match.group(1)) if sukces_match else 0
-            
-            krotki_tytul = row['tytul'][:50].ljust(50) + "..."
-            print(f"📰 {krotki_tytul} -> 🧠 P: {czesc_panika} | S: {czesc_sukces}")
-            
-            # --- ZAPISUJEMY W LOCIE ---
+    try:
+        response = client.models.generate_content(
+            model='gemini-2.5-flash', # Zwykły flash lepiej radzi sobie z formatowaniem JSON
+            contents=zapytanie,
+        )
+        
+        wynik_txt = response.text.replace('```json', '').replace('```', '').strip()
+        wyniki_json = json.loads(wynik_txt)
+        
+        for idx, (_, row) in enumerate(paczka.iterrows()):
             nowy_wiersz = row.copy()
-            nowy_wiersz['panika_ai'] = czesc_panika
-            nowy_wiersz['sukces_ai'] = czesc_sukces
+            nowy_wiersz['panika_ai'] = wyniki_json[idx].get('panika', 0)
+            nowy_wiersz['sukces_ai'] = wyniki_json[idx].get('sukces', 0)
             
-            # Dodajemy oceniony wiersz do historii
+            print(f"📰 Oceniono: {row['tytul'][:40]}... P:{nowy_wiersz['panika_ai']} S:{nowy_wiersz['sukces_ai']}")
+            
             df_historia = pd.concat([df_historia, pd.DataFrame([nowy_wiersz])], ignore_index=True)
             
-            # Ponawiamy sortowanie przy dopisywaniu nowego wiersza, żeby wpadł we właściwe miejsce
-            if 'data' in df_historia.columns:
-                df_historia['temp_sort_date'] = pd.to_datetime(df_historia['data'], errors='coerce')
-                df_historia = df_historia.sort_values(by='temp_sort_date', ascending=False, na_position='last')
-                df_historia = df_historia.drop(columns=['temp_sort_date'])
+        df_historia.to_csv(plik_ocenione, index=False, encoding='utf-8-sig')
+        time.sleep(4) # Krótszy czas oczekiwania, bo wysyłamy rzadziej (paczki)
+        
+    except Exception as e:
+        print(f"⚠️ Błąd przy paczce (Pominięto, sprawdź logi): {e}")
+        time.sleep(10)
 
-            # Zapisujemy na dysk
-            df_historia.to_csv(plik_ocenione, index=False, encoding='utf-8-sig')
-            
-            sukces = True 
-            time.sleep(10) # Odczekanie przed kolejnym zapytaniem
-            
-        except Exception as e:
-            blad_txt = str(e)
-            if '429' in blad_txt or 'RESOURCE_EXHAUSTED' in blad_txt or 'API_KEY_INVALID' in blad_txt:
-                
-                # --- Rotacja kluczy przy wyczerpaniu limitu ---
-                if aktualny_indeks_klucza < len(klucze_api) - 1:
-                    aktualny_indeks_klucza += 1
-                    print(f"\n🔄 Wyczerpano limit lub podano błędny klucz. Przełączam na klucz zapasowy [{aktualny_indeks_klucza}]...")
-                    client = genai.Client(api_key=klucze_api[aktualny_indeks_klucza])
-                    time.sleep(2) 
-                else:
-                    print("🚦 Wszystkie klucze osiągnęły limit częstotliwości (RPM). Czekam 45 sekund...")
-                    time.sleep(5)
-                # --------------------------------------------------------
-                
-            else:
-                print(f"❌ Inny błąd: {blad_txt}")
-                break
-
-print("\n✅ Wszystkie zaległe artykuły zostały przetworzone!")
+print("\n✅ Przetwarzanie zakończone!")

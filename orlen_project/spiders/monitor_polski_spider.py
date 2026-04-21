@@ -1,4 +1,5 @@
 import scrapy
+from scrapy.exceptions import CloseSpider # <--- Dodajemy "Hamulec awaryjny" ze Scrapy
 from scrapy_playwright.page import PageMethod
 import pdfplumber
 import io
@@ -6,13 +7,29 @@ import re
 import os
 import csv
 from datetime import datetime, timedelta
-import pandas as pd # <--- Dodany Pandas do obsługi kalendarza
+import pandas as pd
 
 class CenaMaxMpSpider(scrapy.Spider):
     name = "cena_max_mp"
+    plik_csv = 'data/cena_max.csv'
     
+    def __init__(self, *args, **kwargs):
+        super(CenaMaxMpSpider, self).__init__(*args, **kwargs)
+        self.zapisane_daty = set()
+        
+        # 1. OPTYMALIZACJA: Wczytujemy historię tylko RAZ przy starcie skryptu
+        if os.path.isfile(self.plik_csv):
+            try:
+                with open(self.plik_csv, 'r', encoding='utf-8') as f:
+                    reader = csv.reader(f)
+                    for row in reader:
+                        if row and row[0] != 'data':
+                            self.zapisane_daty.add(row[0])
+                self.logger.info(f"📅 Startuję. W pamięci mam już {len(self.zapisane_daty)} zarchiwizowanych dat.")
+            except Exception as e:
+                self.logger.error(f"Błąd odczytu pliku z historią: {e}")
+
     def start_requests(self):
-        # 🎯 LINK SNAJPERSKI (Wszystkie obwieszczenia na jednej stronie)
         url = "https://monitorpolski.gov.pl/szukaj?pSize=50&pNumber=1&sKey=year&title=w+sprawie+maksymalnej+ceny+paliw+ciek%C5%82ych+na+stacji+paliw&text=#list" 
         
         yield scrapy.Request(
@@ -29,25 +46,24 @@ class CenaMaxMpSpider(scrapy.Spider):
 
     async def parse_lista(self, response):
         page = response.meta["playwright_page"]
-        
-        self.logger.info("🕵️‍♂️ Skanuję tabelę w poszukiwaniu WSZYSTKICH pasujących dokumentów...")
+        self.logger.info("🕵️‍♂️ Skanuję tabelę w poszukiwaniu dokumentów...")
         
         xpath_pdf = "//tr[td[a[contains(text(), 'maksymalnej ceny paliw')]]]//a[img[contains(@src, 'file_pdf')]]/@href"
         linki_pdf = response.xpath(xpath_pdf).getall()
-        
         await page.close()
 
         if linki_pdf:
-            self.logger.info(f"🔗 Znalazłem {len(linki_pdf)} dokumentów PDF! Uruchamiam masowe pobieranie...")
-            for link in linki_pdf:
+            self.logger.info(f"🔗 Znalazłem {len(linki_pdf)} linków. Zaczynam sprawdzanie...")
+            
+            # Wymuszamy kolejność! Priority sprawia, że pobierze najpierw dokument z samej góry
+            for idx, link in enumerate(linki_pdf):
                 pelny_link = response.urljoin(link)
-                yield scrapy.Request(pelny_link, callback=self.parse_pdf)
+                yield scrapy.Request(pelny_link, callback=self.parse_pdf, priority=100-idx)
         else:
-            self.logger.error("❌ Brak wyników. Sprawdź, czy tabela na stronie nie jest pusta.")
+            self.logger.error("❌ Brak wyników na stronie.")
 
     def parse_pdf(self, response):
-        if b"%PDF" not in response.body[:5]:
-            return
+        if b"%PDF" not in response.body[:5]: return
 
         pdf_stream = io.BytesIO(response.body)
         pelny_tekst = ""
@@ -55,13 +71,11 @@ class CenaMaxMpSpider(scrapy.Spider):
         try:
             with pdfplumber.open(pdf_stream) as pdf:
                 for strona in pdf.pages:
-                    tekst_strony = strona.extract_text()
-                    if tekst_strony:
-                        pelny_tekst += tekst_strony + "\n"
+                    tekst = strona.extract_text()
+                    if tekst: pelny_tekst += tekst + "\n"
         except Exception:
             return
 
-        # Wyciąganie cen
         wzor_95 = re.search(r'bezołowiowej\s*95.*?powiększona o podatek.*?wynosi\s*(\d+[,.]\d+)', pelny_tekst, re.IGNORECASE | re.DOTALL)
         wzor_98 = re.search(r'bezołowiowej\s*98.*?powiększona o podatek.*?wynosi\s*(\d+[,.]\d+)', pelny_tekst, re.IGNORECASE | re.DOTALL)
         wzor_on = re.search(r'oleju\s*napędowego.*?powiększona o podatek.*?wynosi\s*(\d+[,.]\d+)', pelny_tekst, re.IGNORECASE | re.DOTALL)
@@ -70,23 +84,15 @@ class CenaMaxMpSpider(scrapy.Spider):
         cena_98 = float(wzor_98.group(1).replace(',', '.')) if wzor_98 else None
         cena_on = float(wzor_on.group(1).replace(',', '.')) if wzor_on else None
 
-        if not (cena_95 or cena_98 or cena_on):
-            return
+        if not (cena_95 or cena_98 or cena_on): return
 
-        # Obliczanie daty
-        miesiace = {
-            'stycznia': 1, 'lutego': 2, 'marca': 3, 'kwietnia': 4, 'maja': 5, 'czerwca': 6,
-            'lipca': 7, 'sierpnia': 8, 'września': 9, 'października': 10, 'listopada': 11, 'grudnia': 12
-        }
+        miesiace = {'stycznia': 1, 'lutego': 2, 'marca': 3, 'kwietnia': 4, 'maja': 5, 'czerwca': 6, 'lipca': 7, 'sierpnia': 8, 'września': 9, 'października': 10, 'listopada': 11, 'grudnia': 12}
         wzor_daty = re.search(r'dnia\s+(\d{1,2})\s+([a-ząćęłńóśźż]+)\s+(\d{4})\s*r', pelny_tekst, re.IGNORECASE)
         
         if wzor_daty:
-            dzien = int(wzor_daty.group(1))
-            miesiac_str = wzor_daty.group(2).lower()
-            rok = int(wzor_daty.group(3))
-            miesiac = miesiace.get(miesiac_str, datetime.now().month)
+            dzien, miesiac_str, rok = int(wzor_daty.group(1)), wzor_daty.group(2).lower(), int(wzor_daty.group(3))
             try:
-                data_obwieszczenia = datetime(rok, miesiac, dzien)
+                data_obwieszczenia = datetime(rok, miesiace.get(miesiac_str, datetime.now().month), dzien)
             except ValueError:
                 data_obwieszczenia = datetime.now()
         else:
@@ -94,78 +100,49 @@ class CenaMaxMpSpider(scrapy.Spider):
 
         data_wejscia = (data_obwieszczenia + timedelta(days=1)).strftime("%Y-%m-%d")
 
-        # Zapis i sprawdzanie duplikatów
-        plik_csv = 'data/cena_max.csv'
-        zapisane_daty = set()
-        
-        if os.path.isfile(plik_csv):
-            with open(plik_csv, 'r', encoding='utf-8') as f:
-                reader = csv.reader(f)
-                for row in reader:
-                    if row and row[0] != 'data':
-                        zapisane_daty.add(row[0])
+        # =========================================================================
+        # 2. HAMULEC AWARYJNY: Jeśli data jest w bazie, zatrzymujemy CAŁEGO pająka!
+        # =========================================================================
+        if data_wejscia in self.zapisane_daty:
+            self.logger.info(f"🛑 Znalazłem zarchiwizowaną datę ({data_wejscia}). PRZERYWAM pobieranie starszych plików!")
+            raise CloseSpider(reason='Baza aktualna')
 
-        if data_wejscia in zapisane_daty:
-            self.logger.info(f"⏭️ Pomijam datę {data_wejscia} (już zarchiwizowana).")
-            return
-
-        plik_jest_pusty = not os.path.isfile(plik_csv) or os.path.getsize(plik_csv) == 0
+        plik_jest_pusty = not os.path.isfile(self.plik_csv) or os.path.getsize(self.plik_csv) == 0
         
-        with open(plik_csv, 'a', encoding='utf-8', newline='') as f:
+        with open(self.plik_csv, 'a', encoding='utf-8', newline='') as f:
             writer = csv.writer(f)
-            if plik_jest_pusty:
-                writer.writerow(['data', 'cena_max_pb95', 'cena_max_pb98', 'cena_max_on'])
+            if plik_jest_pusty: writer.writerow(['data', 'cena_max_pb95', 'cena_max_pb98', 'cena_max_on'])
             writer.writerow([data_wejscia, cena_95, cena_98, cena_on])
 
+        self.zapisane_daty.add(data_wejscia)
         self.logger.info(f"✅ ZAPISANO NOWĄ CENĘ MAX: {data_wejscia}")
 
-    # =========================================================================
-    # NOWOŚĆ: Ta funkcja odpala się automatycznie na samym końcu działania pająka
-    # =========================================================================
     def closed(self, reason):
-        self.logger.info("🛠️ Pająk skończył pobieranie. Odpalam moduł naprawy kalendarza (Pandas)...")
-        plik = 'data/cena_max.csv'
-
-        if not os.path.exists(plik):
+        # Funkcja naprawcza uruchomi się niezależnie od tego, czy skończymy normalnie, 
+        # czy wywołamy wyżej nasz "Hamulec awaryjny".
+        self.logger.info(f"🛠️ Pająk zakończył pracę (Powód: {reason}). Odpalam moduł kalendarza...")
+        
+        if not os.path.exists(self.plik_csv):
             os._exit(0)
 
         try:
-            # 1. Wczytujemy bazę
-            df = pd.read_csv(plik)
-            if df.empty:
-                os._exit(0)
+            df = pd.read_csv(self.plik_csv)
+            if df.empty: os._exit(0)
             df['data'] = pd.to_datetime(df['data'])
+            df = df.drop_duplicates(subset=['data']).sort_values('data', ascending=True).set_index('data')
 
-            # 2. Usuwamy duplikaty i sortujemy ROSNĄCO (tylko na potrzeby matematyki)
-            df = df.drop_duplicates(subset=['data']).sort_values('data', ascending=True)
-            df = df.set_index('data')
-
-            # 3. Tworzymy pełny kalendarz od pierwszej znanej daty aż do "jutra"
             data_start = df.index.min()
             data_koniec = max(df.index.max(), pd.Timestamp((datetime.now() + timedelta(days=1)).date()))
             pelny_kalendarz = pd.date_range(start=data_start, end=data_koniec, freq='D')
 
-            # 4. Wypełniamy puste luki ostatnią znaną ceną (Forward Fill działa w przód)
-            df = df.reindex(pelny_kalendarz)
-            df = df.ffill()
-
-            # 5. Formatujemy z powrotem do kolumn
+            df = df.reindex(pelny_kalendarz).ffill()
             df.index.name = 'data'
-            df = df.reset_index()
-
-            # --- ZMIANA: ODWRACAMY TABELĘ DO GÓRY NOGAMI ---
-            # Teraz najnowsza data (jutro/dziś) będzie na samym szczycie pliku
-            df = df.sort_values('data', ascending=False)
-            
-            # Zamieniamy daty z powrotem na ładny tekst i zapisujemy
+            df = df.reset_index().sort_values('data', ascending=False)
             df['data'] = df['data'].dt.strftime('%Y-%m-%d')
-            df.to_csv(plik, index=False)
+            df.to_csv(self.plik_csv, index=False)
 
-            self.logger.info(f"✅ KALENDARZ NAPRAWIONY! Baza ma {len(df)} dni ciągłej historii (Najnowsze na górze).")
-            
+            self.logger.info(f"✅ KALENDARZ NAPRAWIONY! Baza ma {len(df)} dni ciągłej historii.")
         except Exception as e:
             self.logger.error(f"❌ Wystąpił błąd podczas naprawy pliku CSV: {e}")
-            
         finally:
-            # Ostateczne twarde zamknięcie skryptu (zabija wiszącego Playwrighta)
             os._exit(0)

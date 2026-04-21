@@ -1,13 +1,30 @@
 import scrapy
 from datetime import datetime, timedelta
+import os
+import pandas as pd
 
 class BankierSpider(scrapy.Spider):
     name = "bankier_orlen"
     allowed_domains = ["bankier.pl"]
-
-    limit_czasowy = datetime.now() - timedelta(days=3)
-    data_graniczna = limit_czasowy.strftime("%Y-%m-%d")
     max_pages = 2
+
+    def __init__(self, *args, **kwargs):
+        super(BankierSpider, self).__init__(*args, **kwargs)
+        self.data_graniczna = self.wyznacz_date_graniczna()
+
+    def wyznacz_date_graniczna(self):
+        plik = 'data/wiadomosci_orlen_zestawienie.csv'
+        if os.path.exists(plik):
+            try:
+                df = pd.read_csv(plik)
+                df_zrodlo = df[df['zrodlo'] == 'Bankier']
+                if not df_zrodlo.empty and 'data' in df_zrodlo.columns:
+                    ostatnia_data = pd.to_datetime(df_zrodlo['data']).max()
+                    self.logger.info(f"📅 Ostatnia data w bazie (Bankier): {ostatnia_data.strftime('%Y-%m-%d')}")
+                    return ostatnia_data.strftime('%Y-%m-%d')
+            except Exception as e:
+                self.logger.warning(f"Błąd odczytu CSV: {e}")
+        return (datetime.now() - timedelta(days=3)).strftime("%Y-%m-%d")
 
     def start_requests(self):
         yield scrapy.Request("https://www.bankier.pl/wyszukiwarka?qt=orlen", callback=self.parse_bankier, meta={'page': 1})
@@ -37,4 +54,4 @@ class BankierSpider(scrapy.Spider):
         akapity = response.css('section.o-article-content p *::text, section.o-article-content p::text, div.article-content p::text, div#articleContainer p::text, section.article p::text').getall()
         
         item['tresc'] = " ".join([p.strip() for p in akapity if p.strip()])
-        yield item # Wysyła dane do pipelines.py!
+        yield item
