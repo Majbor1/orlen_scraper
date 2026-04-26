@@ -3,12 +3,12 @@ import json
 import os
 import pandas as pd
 from datetime import datetime, timedelta
+from dotenv import load_dotenv
 
-# =======================================================
-# ⚙️ KONFIGURACJA PUSHOVER
-# =======================================================
-APP_TOKEN = "aijotvuhtoc3xjfg9j57i2iv151iug"
-USER_KEY = "uwgomnkw4u6bfqmzfjrm1ja6v7t73d"
+load_dotenv()
+
+APP_TOKEN = os.getenv("APP_TOKEN")
+USER_KEY = os.getenv("USER_KEY")
 
 def wyslij_push():
     print("📲 Przygotowuję rozszerzone powiadomienie Pushover...")

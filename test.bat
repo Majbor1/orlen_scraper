@@ -40,8 +40,12 @@ echo [7/8] Aktualizuje Tabele Mistrzowska...
 python buduj_tabele.py
 
 echo.
-echo [8/8] Trenuje model AI na swiezych danych i rysuje wykres...
+echo [8/9] Trenuje model AI na swiezych danych i rysuje wykres...
 python trenuj_model.py
+
+echo.
+echo [9/9] Wysylam powiadomienie
+python powiadomienia.py
 
 echo.
 echo =========================================
