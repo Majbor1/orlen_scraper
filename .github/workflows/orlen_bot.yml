@@ -39,7 +39,7 @@ jobs:
           python ocena_ai.py
           python buduj_tabele.py
           python trenuj_model.py
-          python powiadomienia_push.py
+          python powiadomienia.py
 
       - name: Commit and push changes
         run: |
