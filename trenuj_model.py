@@ -170,4 +170,4 @@ os.makedirs(output_dir, exist_ok=True)
 plt.savefig(os.path.join(output_dir, f'{nazwa_wykresu}'), dpi=300)
 
 print(f"\n📈 ZAPISANO WYKRESY: Otwórz '{nazwa_wykresu}' i zobacz trend!")
-plt.show()
+#plt.show()
