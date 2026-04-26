@@ -1,7 +1,8 @@
 import pandas as pd
 import numpy as np
 import matplotlib
-matplotlib.use('Qt5Agg') # Używamy profesjonalnego okienka Qt5
+#matplotlib.use('Qt5Agg') # Używamy profesjonalnego okienka Qt5
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.metrics import mean_absolute_error
