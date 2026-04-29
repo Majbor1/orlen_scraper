@@ -4,6 +4,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 import json
 import os
+import requests
 from datetime import datetime, timedelta
 
 # ==========================================
@@ -21,7 +22,8 @@ def load_data():
     df_master = pd.DataFrame()
     if os.path.exists('data/orlen_master_table.csv'):
         df_master = pd.read_csv('data/orlen_master_table.csv')
-        df_master['data'] = pd.to_datetime(df_master['data'])
+        df_master['data'] = pd.to_datetime(df_master['data'], errors='coerce')
+        df_master = df_master.dropna(subset=['data'])
     return df_master
 
 @st.cache_data
@@ -29,102 +31,132 @@ def load_max_prices():
     df_max = pd.DataFrame()
     if os.path.exists('data/cena_max.csv'):
         df_max = pd.read_csv('data/cena_max.csv')
-        df_max['data'] = pd.to_datetime(df_max['data'])
+        df_max['data'] = pd.to_datetime(df_max['data'], errors='coerce')
+        df_max = df_max.dropna(subset=['data'])
     return df_max
 
 def load_predictions():
     if os.path.exists('data/historia_treningow.json'):
-        with open('data/historia_treningow.json', 'r', encoding='utf-8') as f:
-            historia = json.load(f)
-            if len(historia) > 0:
-                return historia[0]
+        try:
+            with open('data/historia_treningow.json', 'r', encoding='utf-8') as f:
+                historia = json.load(f)
+                if isinstance(historia, list) and len(historia) > 0:
+                    return historia[0]
+        except json.JSONDecodeError:
+            return None
     return None
+
+@st.cache_data
+def load_news():
+    # Wczytujemy plik z OCENAMI z AI
+    plik = 'data/wiadomosci_orlen_Ocenione_AI.csv'
+    if os.path.exists(plik):
+        df_news = pd.read_csv(plik)
+        if 'data' in df_news.columns:
+            df_news['data'] = pd.to_datetime(df_news['data'], errors='coerce')
+            df_news = df_news.sort_values(by='data', ascending=False)
+            df_news['data'] = df_news['data'].dt.strftime('%Y-%m-%d')
+        return df_news
+    return pd.DataFrame()
 
 df = load_data()
 df_max = load_max_prices()
 predykcje = load_predictions()
+df_news = load_news()
 
 # ==========================================
-# 3. ZABEZPIECZENIE
+# 3. KARTY Z PODSUMOWANIEM I PRZYCISK AKTUALIZACJI
 # ==========================================
+col_tytul, col_przycisk = st.columns([3, 1])
+
+with col_tytul:
+    st.subheader("🔮 Prognozy modelu AI na JUTRO")
+    if predykcje:
+        st.caption(f"Ostatnia aktualizacja modelu: {predykcje.get('data_treningu', 'Brak daty')}")
+
+with col_przycisk:
+    # MAGICZNY PRZYCISK DO ODPALANIA GITHUBA
+    st.markdown("<br>", unsafe_allow_html=True) # Odstęp
+    if st.button("🔄 Wymuś aktualizację bazy", type="primary", use_container_width=True):
+        token = st.secrets.get("GITHUB_TOKEN")
+        if not token:
+            st.error("Brak GITHUB_TOKEN w ustawieniach Streamlit!")
+        else:
+            with st.spinner("Wysyłam sygnał do bota..."):
+                url = "https://api.github.com/repos/Majbor1/orlen_scraper/actions/workflows/orlen_bot.yml/dispatches"
+                headers = {
+                    "Accept": "application/vnd.github.v3+json",
+                    "Authorization": f"token {token}"
+                }
+                data = {"ref": "main"}
+                resp = requests.post(url, headers=headers, json=data)
+                if resp.status_code == 204:
+                    st.success("✅ Bot wystartował! Odśwież stronę za kilka minut.")
+                else:
+                    st.error(f"❌ Błąd: {resp.text}")
+
 if df.empty or predykcje is None:
-    st.error("❌ Brak plików z danymi lub modelu AI! Upewnij się, że bot na GitHubie wykonał swoje zadanie.")
+    st.error("❌ Brak danych głównych. Uruchom bota!")
     st.stop()
 
-# ==========================================
-# 4. KARTY Z PODSUMOWANIEM (KPI) I PROGNOZĄ
-# ==========================================
-st.subheader("🔮 Prognozy modelu AI na JUTRO")
 wyniki = predykcje['wyniki']
-data_treningu = predykcje['data_treningu']
-st.caption(f"Ostatnia aktualizacja modelu: {data_treningu}")
-
 kolumny_kpi = st.columns(len(wyniki))
-jutro_data = datetime.now() + timedelta(days=1)
-jutro_str = jutro_data.strftime('%Y-%m-%d')
+jutro_str = (datetime.now() + timedelta(days=1)).strftime('%Y-%m-%d')
 
 for (paliwo, dane), col in zip(wyniki.items(), kolumny_kpi):
-    # Wyciągamy dzisiejszą cenę z pliku CSV (cena za litr)
     ostatni_wiersz = df[df['paliwo'] == paliwo].iloc[-1]
     cena_dzis_l = ostatni_wiersz['cena_dzis'] / 1000
-    
     prognoza_l = dane['prognoza_na_jutro'] / 1000
     zmiana_l = prognoza_l - cena_dzis_l
     
-    # Sprawdzanie limitów rządowych z Monitora Polskiego
     limit_info = ""
     if not df_max.empty:
-        kolumna_max = None
         p_lower = paliwo.lower()
-        if '95' in p_lower: kolumna_max = 'cena_max_pb95'
-        elif '98' in p_lower: kolumna_max = 'cena_max_pb98'
-        elif 'on' in p_lower or 'diesel' in p_lower: kolumna_max = 'cena_max_on'
-        
-        if kolumna_max:
-            limit_row = df_max[df_max['data'] == jutro_str]
-            if not limit_row.empty:
-                val_max = limit_row.iloc[0][kolumna_max]
-                if pd.notna(val_max):
-                    limit_info = f" | 🛡️ Limit rządu: {val_max:.2f} zł/l"
+        kolumna_max = 'cena_max_pb95' if '95' in p_lower else ('cena_max_pb98' if '98' in p_lower else 'cena_max_on')
+        limit_row = df_max[df_max['data'] == jutro_str]
+        if not limit_row.empty and pd.notna(limit_row.iloc[0].get(kolumna_max)):
+            limit_info = f" | 🛡️ Max: {limit_row.iloc[0][kolumna_max]:.2f} zł/l"
     
     with col:
         st.metric(
             label=f"⛽ {paliwo.upper()}{limit_info}",
             value=f"{prognoza_l:.2f} zł/l",
             delta=f"{zmiana_l:.2f} zł/l (vs dziś)",
-            delta_color="inverse" # Czerwony jak rośnie, Zielony jak maleje
+            delta_color="inverse"
         )
 
 st.divider()
 
 # ==========================================
-# 5. SYMULATOR CEN DETALICZNYCH
+# 4. NAPRAWIONY SYMULATOR CEN DETALICZNYCH
 # ==========================================
 st.subheader("🧮 Interaktywny Kalkulator Stacji (Cena na pylonie)")
 
 col1, col2 = st.columns([1, 2])
 
 with col1:
-    st.markdown("**Ustaw marżę stacji (zł/litr)**")
-    marza_pb95 = st.slider("Marża dla Pb95 i Pb98", min_value=0.0, max_value=0.50, value=0.15, step=0.01)
-    marza_on = st.slider("Marża dla ON (Diesel)", min_value=0.0, max_value=0.50, value=0.15, step=0.01)
-    st.info("Koszty operacyjne (logistyka, obsługa) są ustawione na 0.40 zł/l.")
+    st.markdown("**Ustaw marżę stacji (zł/litr netto)**")
+    marza_pb95 = st.slider("Marża dla benzyny", min_value=0.0, max_value=0.50, value=0.15, step=0.01)
+    marza_on = st.slider("Marża dla Diesla", min_value=0.0, max_value=0.50, value=0.15, step=0.01)
+    st.info("Koszty operacyjne (utrzymanie stacji, prąd, pensje) ustawiono na stałe: 0.40 zł/l netto.")
 
 with col2:
     KOSZTY_OPERACYJNE_NETTO = 0.40 
     wyniki_detaliczne = []
     
     for paliwo in df['paliwo'].unique():
-        cena_hurt_l = df[df['paliwo'] == paliwo].iloc[-1]['cena_dzis'] / 1000
+        # Pobieramy najnowszą cenę dla danego paliwa
+        cena_hurt_l = df[df['paliwo'] == paliwo]['cena_dzis'].iloc[-1] / 1000
         marza = marza_on if 'on' in paliwo.lower() or 'diesel' in paliwo.lower() else marza_pb95
         
-        cena_netto = cena_hurt_l + KOSZTY_OPERACYJNE_NETTO + (marza / 1.23)
-        cena_brutto = round(cena_netto * 1.23, 2)
+        # Logika: (Hurt + Koszty + Twoja Marża) + 23% VAT
+        cena_netto = cena_hurt_l + KOSZTY_OPERACYJNE_NETTO + marza
+        cena_brutto = cena_netto * 1.23
         
         wyniki_detaliczne.append({
             "Paliwo": paliwo.upper(),
-            "Hurt (zł/l)": f"{cena_hurt_l:.2f}",
-            "Twoja Marża": f"{marza:.2f}",
+            "Hurt Netto (zł/l)": f"{cena_hurt_l:.2f}",
+            "Twoja Marża Netto": f"{marza:.2f}",
             "CENA NA PYLONIE": f"{cena_brutto:.2f} zł"
         })
     
@@ -133,14 +165,13 @@ with col2:
 st.divider()
 
 # ==========================================
-# 6. INTERAKTYWNY WYKRES
+# 5. INTERAKTYWNY WYKRES
 # ==========================================
 st.subheader("📈 Analiza Trendu (Ostatnie 60 dni)")
 
 wybrane_paliwo = st.selectbox("Wybierz paliwo do wyświetlenia na wykresie:", df['paliwo'].unique())
 
-df_wykres = df[df['paliwo'] == wybrane_paliwo].copy()
-df_wykres = df_wykres.tail(60)
+df_wykres = df[df['paliwo'] == wybrane_paliwo].copy().tail(60)
 
 fig = px.line(
     df_wykres, x='data', y='cena_dzis', 
@@ -165,14 +196,26 @@ fig.add_trace(go.Scatter(
 st.plotly_chart(fig, use_container_width=True)
 
 # ==========================================
-# 7. SENTYMENT AI
+# 6. BAZA ARTYKUŁÓW Z OCENAMI AI
 # ==========================================
-with st.expander("🤖 Rozwiń, aby zobaczyć wpływ mediów i analizę sentymentu (Gemini AI)"):
-    st.markdown("Poniższy wykres pokazuje nastroje w wiadomościach biznesowych (Panika vs Sukces), które model bierze pod uwagę przy prognozowaniu.")
-    fig_ai = px.bar(
-        df_wykres, x='data', y=['panika_ai', 'sukces_ai'], 
-        barmode='group',
-        title="Sentyment AI: Panika (czerwony) vs Sukces (zielony)",
-        color_discrete_map={'panika_ai': '#ff4b4b', 'sukces_ai': '#09ab3b'}
+st.divider()
+st.subheader("📰 Baza Analizowanych Wiadomości")
+st.markdown("Surowe artykuły przeczytane i ocenione przez model AI (chronologicznie).")
+
+if not df_news.empty:
+    # Wyrzucamy pełną treść artykułu z tabeli dla czytelności (jest za długa na widok tabeli)
+    kolumny_do_pokazania = [c for c in df_news.columns if c != 'tresc']
+    
+    st.dataframe(
+        df_news[kolumny_do_pokazania],
+        use_container_width=True, 
+        hide_index=True,          
+        height=400,
+        column_config={
+            "link": st.column_config.LinkColumn("Otwórz artykuł"),
+            "panika_ai": st.column_config.ProgressColumn("Panika", format="%d", min_value=0, max_value=10),
+            "sukces_ai": st.column_config.ProgressColumn("Sukces", format="%d", min_value=0, max_value=10)
+        }
     )
-    st.plotly_chart(fig_ai, use_container_width=True)
+else:
+    st.info("Brak artykułów w bazie ocen.")
