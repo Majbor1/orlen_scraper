@@ -48,7 +48,6 @@ def load_predictions():
 
 @st.cache_data
 def load_news():
-    # Wczytujemy plik z OCENAMI z AI
     plik = 'data/wiadomosci_orlen_Ocenione_AI.csv'
     if os.path.exists(plik):
         df_news = pd.read_csv(plik)
@@ -70,13 +69,12 @@ df_news = load_news()
 col_tytul, col_przycisk = st.columns([3, 1])
 
 with col_tytul:
-    st.subheader("🔮 Prognozy modelu AI na JUTRO")
+    st.subheader("🔮 Prognozy i Limity na JUTRO")
     if predykcje:
         st.caption(f"Ostatnia aktualizacja modelu: {predykcje.get('data_treningu', 'Brak daty')}")
 
 with col_przycisk:
-    # MAGICZNY PRZYCISK DO ODPALANIA GITHUBA
-    st.markdown("<br>", unsafe_allow_html=True) # Odstęp
+    st.markdown("<br>", unsafe_allow_html=True) 
     if st.button("🔄 Wymuś aktualizację bazy", type="primary", use_container_width=True):
         token = st.secrets.get("GITHUB_TOKEN")
         if not token:
@@ -109,26 +107,39 @@ for (paliwo, dane), col in zip(wyniki.items(), kolumny_kpi):
     prognoza_l = dane['prognoza_na_jutro'] / 1000
     zmiana_l = prognoza_l - cena_dzis_l
     
-    limit_info = ""
+    # Wyszukiwanie limitów
+    limit_val = None
     if not df_max.empty:
         p_lower = paliwo.lower()
         kolumna_max = 'cena_max_pb95' if '95' in p_lower else ('cena_max_pb98' if '98' in p_lower else 'cena_max_on')
         limit_row = df_max[df_max['data'] == jutro_str]
-        if not limit_row.empty and pd.notna(limit_row.iloc[0].get(kolumna_max)):
-            limit_info = f" | 🛡️ Max: {limit_row.iloc[0][kolumna_max]:.2f} zł/l"
+        if not limit_row.empty:
+            val = limit_row.iloc[0].get(kolumna_max)
+            if pd.notna(val):
+                limit_val = val
     
     with col:
-        st.metric(
-            label=f"⛽ {paliwo.upper()}{limit_info}",
-            value=f"{prognoza_l:.2f} zł/l",
-            delta=f"{zmiana_l:.2f} zł/l (vs dziś)",
-            delta_color="inverse"
-        )
+        if limit_val is not None:
+            # WARIANT 1: Wyświetl Cenę Rządową jako główną
+            st.metric(
+                label=f"🛡️ {paliwo.upper()} (Cena Rządowa)",
+                value=f"{limit_val:.2f} zł/l",
+                delta=f"AI prognozuje: {prognoza_l:.2f} zł/l",
+                delta_color="off" # Szary kolor by pokazać info, a nie trend
+            )
+        else:
+            # WARIANT 2: Brak Ceny Rządowej, Pokaż AI
+            st.metric(
+                label=f"🔮 {paliwo.upper()} (Prognoza AI)",
+                value=f"{prognoza_l:.2f} zł/l",
+                delta=f"{zmiana_l:.2f} zł/l (vs dziś)",
+                delta_color="inverse"
+            )
 
 st.divider()
 
 # ==========================================
-# 4. NAPRAWIONY SYMULATOR CEN DETALICZNYCH
+# 4. SYMULATOR CEN DETALICZNYCH
 # ==========================================
 st.subheader("🧮 Interaktywny Kalkulator Stacji (Cena na pylonie)")
 
@@ -145,20 +156,37 @@ with col2:
     wyniki_detaliczne = []
     
     for paliwo in df['paliwo'].unique():
-        # Pobieramy najnowszą cenę dla danego paliwa
         cena_hurt_l = df[df['paliwo'] == paliwo]['cena_dzis'].iloc[-1] / 1000
         marza = marza_on if 'on' in paliwo.lower() or 'diesel' in paliwo.lower() else marza_pb95
         
-        # Logika: (Hurt + Koszty + Twoja Marża) + 23% VAT
         cena_netto = cena_hurt_l + KOSZTY_OPERACYJNE_NETTO + marza
         cena_brutto = cena_netto * 1.23
         
-        wyniki_detaliczne.append({
+        # Odszukujemy znowu limit na potrzeby kalkulatora
+        limit_val = None
+        if not df_max.empty:
+            p_lower = paliwo.lower()
+            kolumna_max = 'cena_max_pb95' if '95' in p_lower else ('cena_max_pb98' if '98' in p_lower else 'cena_max_on')
+            limit_row = df_max[df_max['data'] == jutro_str]
+            if not limit_row.empty:
+                val = limit_row.iloc[0].get(kolumna_max)
+                if pd.notna(val):
+                    limit_val = val
+
+        row_data = {
             "Paliwo": paliwo.upper(),
             "Hurt Netto (zł/l)": f"{cena_hurt_l:.2f}",
             "Twoja Marża Netto": f"{marza:.2f}",
             "CENA NA PYLONIE": f"{cena_brutto:.2f} zł"
-        })
+        }
+
+        # Jeśli jest limit państwowy, pokazujemy porównanie
+        if limit_val is not None:
+            roznica = limit_val - cena_brutto
+            row_data["Limit Rządowy"] = f"{limit_val:.2f} zł"
+            row_data["Zapas do limitu"] = f"{roznica:.2f} zł"
+
+        wyniki_detaliczne.append(row_data)
     
     st.dataframe(wyniki_detaliczne, use_container_width=True, hide_index=True)
 
@@ -203,7 +231,6 @@ st.subheader("📰 Baza Analizowanych Wiadomości")
 st.markdown("Surowe artykuły przeczytane i ocenione przez model AI (chronologicznie).")
 
 if not df_news.empty:
-    # Wyrzucamy pełną treść artykułu z tabeli dla czytelności (jest za długa na widok tabeli)
     kolumny_do_pokazania = [c for c in df_news.columns if c != 'tresc']
     
     st.dataframe(

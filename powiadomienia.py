@@ -48,21 +48,20 @@ def wyslij_push():
         # Pobieramy ostatnią znaną cenę dzisiejszą dla tego paliwa
         ostatnia_cena_hurt = df_hurt[df_hurt['paliwo'] == paliwo].iloc[-1]['cena_dzis']
         
-        # Logika rekomendacji
+        # Logika rekomendacji (według różnicy w hurtowej predykcji)
         roznica = prognoza_m3 - ostatnia_cena_hurt
         if roznica > 5: # Wzrost o więcej niż 5 PLN/m3
-            status = "🔴 KUPUJ TERAZ (Jutro drożej)"
+            status = "🔴 KUPUJ TERAZ (Jutro drożej w hurcie)"
             rekomendacja_ogolna = "⚠️ Tankuj dziś!"
         elif roznica < -5: # Spadek o więcej niż 5 PLN/m3
-            status = "🟢 CZEKAJ (Jutro taniej)"
+            status = "🟢 CZEKAJ (Jutro taniej w hurcie)"
             rekomendacja_ogolna = "⚠️ Czekaj z tankowaniem"
         else:
-            status = "🟡 BEZ ZMIAN"
+            status = "🟡 BEZ ZMIAN W HURCIE"
 
-        # Szukamy ceny maksymalnej w pliku rządowym
-        limit_txt = ""
+        # Szukamy ceny maksymalnej w pliku rządowym na jutro
+        limit_val = None
         if df_max is not None:
-            # Mapowanie nazw paliw na kolumny w cena_max.csv
             kolumna_max = None
             p_lower = paliwo.lower()
             if '95' in p_lower: kolumna_max = 'cena_max_pb95'
@@ -72,13 +71,22 @@ def wyslij_push():
             if kolumna_max:
                 limit_row = df_max[df_max['data'] == jutro_str]
                 if not limit_row.empty:
-                    val_max = limit_row.iloc[0][kolumna_max]
-                    if pd.notna(val_max):
-                        limit_txt = f" (Limit: {val_max} zł/l)"
+                    val = limit_row.iloc[0][kolumna_max]
+                    if pd.notna(val):
+                        limit_val = val
 
+        # Budowanie bloku tekstowego dla konkretnego paliwa
         wiadomosc += f"⛽ {paliwo.upper()}\n"
-        wiadomosc += f"⛽ Jutro: {prognoza_l} zł/l{limit_txt}\n"
-        wiadomosc += f"⛽ {status}\n\n"
+        
+        if limit_val is not None:
+            # WARIANT 1: Jest limit rządowy (Priorytet)
+            wiadomosc += f"🛡️ LIMIT RZĄDOWY: {limit_val:.2f} zł/l\n"
+            wiadomosc += f"🔮 (Prognoza AI: {prognoza_l:.2f} zł/l)\n"
+        else:
+            # WARIANT 2: Brak limitu (Główna rola AI)
+            wiadomosc += f"🔮 PROGNOZA AI: {prognoza_l:.2f} zł/l\n"
+            
+        wiadomosc += f"📊 {status}\n\n"
     
     # 4. Wysyłka do Pushover
     dzis_data = datetime.now().strftime("%Y-%m-%d")
