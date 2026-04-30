@@ -81,7 +81,7 @@ with col_przycisk:
             st.error("Brak GITHUB_TOKEN w ustawieniach Streamlit!")
         else:
             with st.spinner("Wysyłam sygnał do bota..."):
-                url = "https://api.github.com/repos/Majbor1/orlen_scraper/actions/workflows/orlen_bot.yml/dispatches"
+                url = "https://api.github.com/repos/Majbor1/orlen_scraper/actions/workflows/strona_bot.yml/dispatches"
                 headers = {
                     "Accept": "application/vnd.github.v3+json",
                     "Authorization": f"token {token}"
