@@ -70,32 +70,41 @@ predykcje = load_predictions()
 df_news = load_news()
 
 # ==========================================
-# 3. BLOKADA AKTUALIZACJI (OPARTA O DATĘ Z MODELU AI)
+# 3. BLOKADA AKTUALIZACJI I KONWERSJA CZASU (POLSKA)
 # ==========================================
 mozna_aktualizowac = True
 komunikat_blokady = ""
+data_treningu_wyswietlana = "Brak daty" # Domyślny tekst, jeśli wystąpi błąd
 
-# Sprawdzamy czas od ostatniego udanego pobrania danych przez AI
 if predykcje and 'data_treningu' in predykcje:
     try:
-        # Konwersja tekstu z JSON-a na obiekt daty i czasu
-        ostatnia_aktualizacja = pd.to_datetime(predykcje['data_treningu'])
+        # 1. Konwersja tekstu z JSON-a na obiekt czasu
+        czas_oryginalny = pd.to_datetime(predykcje['data_treningu'])
         
-        # Jeśli data z JSON-a zawiera strefę czasową, usuwamy ją, by łatwiej porównać z czasem lokalnym
-        if ostatnia_aktualizacja.tzinfo is not None:
-            ostatnia_aktualizacja = ostatnia_aktualizacja.tz_localize(None)
+        # 2. Jeśli serwer zapisał datę bez strefy, zakładamy, że to uniwersalny czas UTC
+        if czas_oryginalny.tzinfo is None:
+            czas_oryginalny = czas_oryginalny.tz_localize('UTC')
             
-        czas_od_aktualizacji = datetime.now() - ostatnia_aktualizacja
+        # 3. Magia: Konwertujemy datę na polską strefę czasową (automatycznie uwzględnia czas letni/zimowy)
+        czas_polski = czas_oryginalny.tz_convert('Europe/Warsaw')
+        
+        # 4. Formatujemy polski czas do ładnego tekstu dla użytkownika
+        data_treningu_wyswietlana = czas_polski.strftime("%Y-%m-%d %H:%M:%S")
+        
+        # 5. Pobieramy obecny czas, również wymuszając polską strefę czasową
+        aktualny_czas_polski = pd.Timestamp.now(tz='Europe/Warsaw')
+        
+        # 6. Sprawdzamy różnicę w czasie do ustalenia blokady
+        czas_od_aktualizacji = aktualny_czas_polski - czas_polski
         
         # 10 minut = 600 sekund
         if 0 <= czas_od_aktualizacji.total_seconds() < 600:
             mozna_aktualizowac = False
-            # Używamy math.ceil, aby zawsze zaokrąglać w górę (np. 9.1 -> 10 minut)
             minuty_do_konca = math.ceil((600 - czas_od_aktualizacji.total_seconds()) / 60)
             komunikat_blokady = f"Następna aktualizacja możliwa za {minuty_do_konca} minut."
     except Exception as e:
-        # Jeśli napotkamy nietypowy format daty, przepuszczamy, by nie zablokować aplikacji
-        pass
+        # Awaryjnie, gdyby JSON zawierał dziwny format tekstu
+        data_treningu_wyswietlana = predykcje.get('data_treningu', 'Brak daty')
 
 # ==========================================
 # 4. KARTY Z PODSUMOWANIEM I PRZYCISK AKTUALIZACJI
@@ -105,7 +114,8 @@ col_tytul, col_przycisk = st.columns([3, 1])
 with col_tytul:
     st.subheader("🔮 Prognozy i Limity na JUTRO")
     if predykcje:
-        st.caption(f"Ostatnia aktualizacja modelu: {predykcje.get('data_treningu', 'Brak daty')}")
+        # Wyświetlamy naszą nową, przekonwertowaną zmienną z polskim czasem
+        st.caption(f"Ostatnia aktualizacja modelu: {data_treningu_wyswietlana}")
 
 with col_przycisk:
     st.markdown("<br>", unsafe_allow_html=True) 
@@ -124,7 +134,6 @@ with col_przycisk:
             resp = requests.post(url, headers=headers, json=data)
             
             if resp.status_code == 204:
-                # Blokujemy interfejs tylko na czas trwania aktualizacji
                 st.session_state.trwa_aktualizacja = True
                 st.rerun()            
             else:
