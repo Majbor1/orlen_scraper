@@ -14,9 +14,8 @@ from datetime import datetime, timedelta
 # ==========================================
 st.set_page_config(page_title="Orlen AI Dashboard", page_icon="⛽", layout="wide")
 st.title("⛽ Orlen AI - Interaktywny Panel Analityczny")
-st.markdown("Monitoruj ceny hurtowe, prognozy Sztucznej Inteligencji i limity rządowe.")
+st.markdown("Monitoruj szacowane ceny na stacjach, prognozy AI i limity rządowe.")
 
-# Zmienna w pamięci przeglądarki do zarządzania animacją ładowania
 if 'trwa_aktualizacja' not in st.session_state:
     st.session_state.trwa_aktualizacja = False
 
@@ -74,36 +73,25 @@ df_news = load_news()
 # ==========================================
 mozna_aktualizowac = True
 komunikat_blokady = ""
-data_treningu_wyswietlana = "Brak daty" # Domyślny tekst, jeśli wystąpi błąd
+data_treningu_wyswietlana = "Brak daty"
 
 if predykcje and 'data_treningu' in predykcje:
     try:
-        # 1. Konwersja tekstu z JSON-a na obiekt czasu
         czas_oryginalny = pd.to_datetime(predykcje['data_treningu'])
-        
-        # 2. Jeśli serwer zapisał datę bez strefy, zakładamy, że to uniwersalny czas UTC
         if czas_oryginalny.tzinfo is None:
             czas_oryginalny = czas_oryginalny.tz_localize('UTC')
             
-        # 3. Magia: Konwertujemy datę na polską strefę czasową (automatycznie uwzględnia czas letni/zimowy)
         czas_polski = czas_oryginalny.tz_convert('Europe/Warsaw')
-        
-        # 4. Formatujemy polski czas do ładnego tekstu dla użytkownika
         data_treningu_wyswietlana = czas_polski.strftime("%Y-%m-%d %H:%M:%S")
         
-        # 5. Pobieramy obecny czas, również wymuszając polską strefę czasową
         aktualny_czas_polski = pd.Timestamp.now(tz='Europe/Warsaw')
-        
-        # 6. Sprawdzamy różnicę w czasie do ustalenia blokady
         czas_od_aktualizacji = aktualny_czas_polski - czas_polski
         
-        # 10 minut = 600 sekund
         if 0 <= czas_od_aktualizacji.total_seconds() < 600:
             mozna_aktualizowac = False
             minuty_do_konca = math.ceil((600 - czas_od_aktualizacji.total_seconds()) / 60)
             komunikat_blokady = f"Następna aktualizacja możliwa za {minuty_do_konca} minut."
     except Exception as e:
-        # Awaryjnie, gdyby JSON zawierał dziwny format tekstu
         data_treningu_wyswietlana = predykcje.get('data_treningu', 'Brak daty')
 
 # ==========================================
@@ -112,9 +100,8 @@ if predykcje and 'data_treningu' in predykcje:
 col_tytul, col_przycisk = st.columns([3, 1])
 
 with col_tytul:
-    st.subheader("🔮 Prognozy i Limity na JUTRO")
+    st.subheader(" Szacowane Ceny Detaliczne na JUTRO")
     if predykcje:
-        # Wyświetlamy naszą nową, przekonwertowaną zmienną z polskim czasem
         st.caption(f"Ostatnia aktualizacja modelu: {data_treningu_wyswietlana}")
 
 with col_przycisk:
@@ -146,72 +133,14 @@ if df.empty or predykcje is None:
     st.error("❌ Brak danych głównych. Uruchom bota!")
     st.stop()
 
-# Puste pudełko na układ kafelków
+# Puste pudełko na układ cen
 pojemnik_na_ceny = st.empty()
 st.divider()
 
 # ==========================================
-# 5. SYMULATOR CEN DETALICZNYCH
+# 5. INTERAKTYWNY WYKRES
 # ==========================================
-st.subheader("🧮 Interaktywny Kalkulator Stacji (Cena na pylonie)")
-
-col1, col2 = st.columns([1, 2])
-jutro_str = (datetime.now() + timedelta(days=1)).strftime('%Y-%m-%d')
-
-with col1:
-    st.markdown("**Ustaw marżę stacji (zł/litr netto)**")
-    marza_pb95 = st.slider("Marża dla benzyny", min_value=0.0, max_value=0.50, value=0.15, step=0.01)
-    marza_on = st.slider("Marża dla Diesla", min_value=0.0, max_value=0.50, value=0.15, step=0.01)
-    st.info("Koszty operacyjne (utrzymanie stacji, prąd, pensje) ustawiono na stałe: 0.40 zł/l netto.")
-
-with col2:
-    KOSZTY_OPERACYJNE_NETTO = 0.40 
-    wyniki_detaliczne = []
-    
-    for paliwo in df['paliwo'].unique():
-        ostatni_wiersz = df[df['paliwo'] == paliwo].iloc[-1]
-        cena_hurt_l = ostatni_wiersz['cena_dzis'] / 1000
-        marza = marza_on if 'on' in paliwo.lower() or 'diesel' in paliwo.lower() else marza_pb95
-        
-        pobrany_vat = ostatni_wiersz.get('vat', 8)
-        if pd.isna(pobrany_vat): pobrany_vat = 8
-        mnoznik_vat = 1 + (float(pobrany_vat) / 100)
-        
-        cena_netto = cena_hurt_l + KOSZTY_OPERACYJNE_NETTO + marza
-        cena_brutto = cena_netto * mnoznik_vat
-        
-        limit_val = None
-        if not df_max.empty:
-            p_lower = paliwo.lower()
-            kolumna_max = 'cena_max_pb95' if '95' in p_lower else ('cena_max_pb98' if '98' in p_lower else 'cena_max_on')
-            limit_row = df_max[df_max['data'] == jutro_str]
-            if not limit_row.empty:
-                val = limit_row.iloc[0].get(kolumna_max)
-                if pd.notna(val):
-                    limit_val = val
-
-        row_data = {
-            "Paliwo": paliwo.upper(),
-            "Hurt Netto (zł/l)": f"{cena_hurt_l:.2f}",
-            "Twoja Marża Netto": f"{marza:.2f}",
-            f"CENA NA PYLONIE ({int(pobrany_vat)}% VAT)": f"{cena_brutto:.2f} zł"
-        }
-
-        if limit_val is not None:
-            roznica = limit_val - cena_brutto
-            row_data["Limit Rządowy"] = f"{limit_val:.2f} zł"
-            row_data["Zapas do limitu"] = f"{roznica:.2f} zł"
-
-        wyniki_detaliczne.append(row_data)
-    
-    st.dataframe(wyniki_detaliczne, use_container_width=True, hide_index=True)
-
-st.divider()
-
-# ==========================================
-# 6. INTERAKTYWNY WYKRES
-# ==========================================
-st.subheader("📈 Analiza Trendu (Ostatnie 60 dni)")
+st.subheader(" Analiza Trendu (Ostatnie 60 dni)")
 
 wybrane_paliwo = st.selectbox("Wybierz paliwo do wyświetlenia na wykresie:", df['paliwo'].unique())
 wyniki = predykcje['wyniki']
@@ -241,10 +170,10 @@ fig.add_trace(go.Scatter(
 st.plotly_chart(fig, use_container_width=True)
 
 # ==========================================
-# 7. BAZA ARTYKUŁÓW (WIDOK TABELI)
+# 6. BAZA ARTYKUŁÓW (WIDOK TABELI)
 # ==========================================
 st.divider()
-st.subheader("📰 Baza Analizowanych Wiadomości")
+st.subheader(" Baza Analizowanych Wiadomości")
 st.markdown("Lista artykułów, na podstawie których AI analizowało nastroje rynkowe.")
 
 if not df_news.empty:
@@ -266,7 +195,7 @@ else:
     st.info("Brak artykułów w bazie ocen.")
 
 # ==========================================
-# 8. STOPKA (FOOTER)
+# 7. STOPKA (FOOTER)
 # ==========================================
 st.markdown("<br><br>", unsafe_allow_html=True) 
 st.divider()
@@ -280,8 +209,11 @@ st.markdown(
 )
 
 # ==========================================
-# 9. MAGICZNA LOGIKA ŁADOWANIA Z KROPKAMI
+# 8. MAGICZNA LOGIKA ŁADOWANIA ORAZ PANELE Z DECYZJAMI W STYLU POWIADOMIEŃ
 # ==========================================
+dzis_str = datetime.now().strftime('%Y-%m-%d')
+jutro_str = (datetime.now() + timedelta(days=1)).strftime('%Y-%m-%d')
+
 if st.session_state.trwa_aktualizacja:
     for i in range(1, 121):
         kropki = ". " * ((i % 3) + 1)
@@ -294,37 +226,76 @@ if st.session_state.trwa_aktualizacja:
 else:
     with pojemnik_na_ceny.container():
         kolumny_kpi = st.columns(len(wyniki))
+        
+        KOSZTY_OPERACYJNE_NETTO = 0.40
+        MARZA_NETTO = 0.20
+        
         for (paliwo, dane), col in zip(wyniki.items(), kolumny_kpi):
+            # 1. Obliczenia Hurtowe
             ostatni_wiersz = df[df['paliwo'] == paliwo].iloc[-1]
-            cena_dzis_l = ostatni_wiersz['cena_dzis'] / 1000
-            prognoza_l = dane['prognoza_na_jutro'] / 1000
-            zmiana_l = prognoza_l - cena_dzis_l
+            hurt_dzis_l = ostatni_wiersz['cena_dzis'] / 1000
+            hurt_jutro_l = dane['prognoza_na_jutro'] / 1000
             
-            limit_val = None
+            # 2. Pobieranie VAT
+            pobrany_vat = ostatni_wiersz.get('vat', 8)
+            if pd.isna(pobrany_vat): pobrany_vat = 8
+            mnoznik_vat = 1 + (float(pobrany_vat) / 100)
+            
+            # 3. Szacowany Detal
+            detal_dzis = (hurt_dzis_l + KOSZTY_OPERACYJNE_NETTO + MARZA_NETTO) * mnoznik_vat
+            detal_jutro = (hurt_jutro_l + KOSZTY_OPERACYJNE_NETTO + MARZA_NETTO) * mnoznik_vat
+            
+            # 4. Sprawdzanie limitów państwowych na dziś i na jutro
+            limit_dzis = None
+            limit_jutro = None
+            
             if not df_max.empty:
                 p_lower = paliwo.lower()
                 kolumna_max = 'cena_max_pb95' if '95' in p_lower else ('cena_max_pb98' if '98' in p_lower else 'cena_max_on')
-                limit_row = df_max[df_max['data'] == jutro_str]
-                if not limit_row.empty:
-                    val = limit_row.iloc[0].get(kolumna_max)
-                    if pd.notna(val):
-                        limit_val = val
+                
+                row_dzis = df_max[df_max['data'] == dzis_str]
+                if not row_dzis.empty:
+                    val = row_dzis.iloc[0].get(kolumna_max)
+                    if pd.notna(val): limit_dzis = val
+                        
+                row_jutro = df_max[df_max['data'] == jutro_str]
+                if not row_jutro.empty:
+                    val = row_jutro.iloc[0].get(kolumna_max)
+                    if pd.notna(val): limit_jutro = val
             
+            # 5. Ustalenie Ceny Ostatecznej
+            cena_ostateczna_dzis = min(detal_dzis, limit_dzis) if limit_dzis else detal_dzis
+            cena_ostateczna_jutro = min(detal_jutro, limit_jutro) if limit_jutro else detal_jutro
+            
+            roznica = cena_ostateczna_jutro - cena_ostateczna_dzis
+            
+            # 6. Teksty zastępcze dla braku limitu
+            tekst_limit_dzis = f"{limit_dzis:.2f} zł/l" if limit_dzis else "Brak"
+            tekst_limit_jutro = f"{limit_jutro:.2f} zł/l" if limit_jutro else "Brak"
+            
+            # WYSWIETLANIE W KOLUMNIE (Kopia struktury z Pushover)
             with col:
-                if limit_val is not None:
-                    st.metric(
-                        label=f"🛡️ {paliwo.upper()} (Limit na jutro)",
-                        value=f"{limit_val:.2f} zł/l",
-                        delta=f"{zmiana_l:+.2f} zł/l (zmiana hurtowa)",
-                        delta_color="inverse" 
-                    )
-                    st.caption(f"🏭 Hurt dziś: **{cena_dzis_l:.2f} zł/l**")
-                    st.caption(f"🔮 Hurt jutro (AI): **{prognoza_l:.2f} zł/l**")
+                st.markdown(f"### ⛽ {paliwo.upper()}")
+                
+                # Decyzja - podświetlona kolorami
+                if roznica > 0.02:
+                    st.error(f"**👉 DECYZJA:** 🔴 TANKUJ DZIŚ! (Jutro drożej o {roznica:.2f} zł/l)")
+                elif roznica < -0.02:
+                    st.success(f"**👉 DECYZJA:** 🟢 CZEKAJ! (Jutro taniej o {abs(roznica):.2f} zł/l)")
                 else:
-                    st.metric(
-                        label=f"🔮 {paliwo.upper()} (Hurt na jutro AI)",
-                        value=f"{prognoza_l:.2f} zł/l",
-                        delta=f"{zmiana_l:+.2f} zł/l (vs dziś)",
-                        delta_color="inverse"
-                    )
-                    st.caption(f"🏭 Hurt dziś: **{cena_dzis_l:.2f} zł/l**")
+                    st.warning(f"**👉 DECYZJA:** 🟡 BEZ ZMIAN (Różnica: {roznica:+.2f} zł/l)")
+                
+                # Reszta danych wyświetlona za pomocą struktury listy Markdown
+                st.markdown(f"""
+                ** Cena maksymalna:**
+                * **Dziś ({dzis_str}):** {tekst_limit_dzis}
+                * **Jutro ({jutro_str}):** {tekst_limit_jutro}
+
+                **Cena hurtowa (Orlen):**
+                * **Dziś:** {hurt_dzis_l:.2f} zł/l
+                * **Jutro (AI estyma):** {hurt_jutro_l:.2f} zł/l
+
+                ** Szacowana cena detaliczna (Z VAT {int(pobrany_vat)}%):**
+                * **Dziś:** {detal_dzis:.2f} zł/l
+                * **Jutro:** {detal_jutro:.2f} zł/l
+                """)
