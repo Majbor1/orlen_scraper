@@ -9,11 +9,15 @@ import time
 from datetime import datetime, timedelta
 
 # ==========================================
-# 1. KONFIGURACJA STRONY
+# 1. KONFIGURACJA STRONY I PAMIĘCI SESJI
 # ==========================================
 st.set_page_config(page_title="Orlen AI Dashboard", page_icon="⛽", layout="wide")
 st.title("⛽ Orlen AI - Interaktywny Panel Analityczny")
 st.markdown("Monitoruj ceny hurtowe, prognozy Sztucznej Inteligencji i limity rządowe.")
+
+# Zmienna w pamięci przeglądarki, która wie, czy bot aktualnie pracuje
+if 'trwa_aktualizacja' not in st.session_state:
+    st.session_state.trwa_aktualizacja = False
 
 # ==========================================
 # 2. FUNKCJE WCZYTUJĄCE DANE
@@ -75,9 +79,9 @@ if os.path.exists('data/orlen_master_table.csv'):
     ostatnia_aktualizacja = datetime.fromtimestamp(czas_modyfikacji)
     czas_od_aktualizacji = datetime.now() - ostatnia_aktualizacja
     
-    if czas_od_aktualizacji.total_seconds() < 3000:
+    if czas_od_aktualizacji.total_seconds() < 7200:
         mozna_aktualizowac = False
-        minuty_do_konca = int((3000 - czas_od_aktualizacji.total_seconds()/60))
+        minuty_do_konca = int((7200 - czas_od_aktualizacji.total_seconds()) / 60)
         komunikat_blokady = f"Następna aktualizacja możliwa za {minuty_do_konca} minut."
 
 # ==========================================
@@ -86,19 +90,20 @@ if os.path.exists('data/orlen_master_table.csv'):
 col_tytul, col_przycisk = st.columns([3, 1])
 
 with col_tytul:
-    st.subheader("CENY PALIWA")
+    st.subheader("🔮 Prognozy i Limity na JUTRO")
     if predykcje:
         st.caption(f"Ostatnia aktualizacja modelu: {predykcje.get('data_treningu', 'Brak daty')}")
 
 with col_przycisk:
     st.markdown("<br>", unsafe_allow_html=True) 
     
-    if st.button("🔄 Wymuś aktualizację bazy", type="primary", use_container_width=True, disabled=not mozna_aktualizowac):
+    # Przycisk włącza tryb aktualizacji w pamięci sesji
+    if st.button("🔄 Wymuś aktualizację bazy", type="primary", use_container_width=True, disabled=not mozna_aktualizowac or st.session_state.trwa_aktualizacja):
         token = st.secrets.get("GITHUB_TOKEN")
         if not token:
             st.error("Brak GITHUB_TOKEN w ustawieniach Streamlit!")
         else:
-            url = "https://api.github.com/repos/Majbor1/orlen_scraper/actions/workflows/strona_bot.yml/dispatches"
+            url = "https://api.github.com/repos/Majbor1/orlen_scraper/actions/workflows/orlen_bot.yml/dispatches"
             headers = {
                 "Accept": "application/vnd.github.v3+json",
                 "Authorization": f"token {token}"
@@ -107,72 +112,30 @@ with col_przycisk:
             resp = requests.post(url, headers=headers, json=data)
             
             if resp.status_code == 204:
-                status_placeholder = st.empty()
-                for i in range(120):
-                    kropki = "." * ((i % 3) + 1)
-                    status_placeholder.info(f"Pobieranie najnowszych danych{kropki}")
-                    time.sleep(3)
-                
-                st.cache_data.clear() 
+                # Zapisujemy w pamięci, że zaczęliśmy aktualizację i odświeżamy stronę
+                st.session_state.trwa_aktualizacja = True
                 st.rerun()            
             else:
                 st.error(f"❌ Błąd wysyłania: {resp.text}")
                 
-    if not mozna_aktualizowac:
+    if not mozna_aktualizowac and not st.session_state.trwa_aktualizacja:
         st.caption(komunikat_blokady)
 
 if df.empty or predykcje is None:
     st.error("❌ Brak danych głównych. Uruchom bota!")
     st.stop()
 
-# Generowanie kafelków z cenami
-wyniki = predykcje['wyniki']
-kolumny_kpi = st.columns(len(wyniki))
-jutro_str = (datetime.now() + timedelta(days=1)).strftime('%Y-%m-%d')
-
-for (paliwo, dane), col in zip(wyniki.items(), kolumny_kpi):
-    ostatni_wiersz = df[df['paliwo'] == paliwo].iloc[-1]
-    cena_dzis_l = ostatni_wiersz['cena_dzis'] / 1000
-    prognoza_l = dane['prognoza_na_jutro'] / 1000
-    zmiana_l = prognoza_l - cena_dzis_l
-    
-    limit_val = None
-    if not df_max.empty:
-        p_lower = paliwo.lower()
-        kolumna_max = 'cena_max_pb95' if '95' in p_lower else ('cena_max_pb98' if '98' in p_lower else 'cena_max_on')
-        limit_row = df_max[df_max['data'] == jutro_str]
-        if not limit_row.empty:
-            val = limit_row.iloc[0].get(kolumna_max)
-            if pd.notna(val):
-                limit_val = val
-    
-    with col:
-        if limit_val is not None:
-            st.metric(
-                label=f"🛡️ {paliwo.upper()} (Limit na jutro)",
-                value=f"{limit_val:.2f} zł/l",
-                delta=f"{zmiana_l:+.2f} zł/l (zmiana hurtowa)",
-                delta_color="inverse" 
-            )
-            st.caption(f"Cena hurtowaurt dziś: **{cena_dzis_l:.2f} zł/l**")
-            st.caption(f"Szacowana cena hurtowa jutro: **{prognoza_l:.2f} zł/l**")
-        else:
-            st.metric(
-                label=f"🔮 {paliwo.upper()} (Hurt na jutro AI)",
-                value=f"{prognoza_l:.2f} zł/l",
-                delta=f"{zmiana_l:+.2f} zł/l (vs dziś)",
-                delta_color="inverse"
-            )
-            st.caption(f"Cena hurtowa dziś: **{cena_dzis_l:.2f} zł/l**")
-
+# TWORZYMY PUSTE PUDEŁKO NA CENY LUB ANIMACJĘ
+pojemnik_na_ceny = st.empty()
 st.divider()
 
 # ==========================================
-# 5. SYMULATOR CEN DETALICZNYCH
+# 5. SYMULATOR CEN DETALICZNYCH (Rysuje się od razu!)
 # ==========================================
-st.subheader("Interaktywny Kalkulator Stacji (Cena na pylonie)")
+st.subheader("🧮 Interaktywny Kalkulator Stacji (Cena na pylonie)")
 
 col1, col2 = st.columns([1, 2])
+jutro_str = (datetime.now() + timedelta(days=1)).strftime('%Y-%m-%d')
 
 with col1:
     st.markdown("**Ustaw marżę stacji (zł/litr netto)**")
@@ -225,11 +188,12 @@ with col2:
 st.divider()
 
 # ==========================================
-# 6. INTERAKTYWNY WYKRES
+# 6. INTERAKTYWNY WYKRES (Rysuje się od razu!)
 # ==========================================
 st.subheader("📈 Analiza Trendu (Ostatnie 60 dni)")
 
 wybrane_paliwo = st.selectbox("Wybierz paliwo do wyświetlenia na wykresie:", df['paliwo'].unique())
+wyniki = predykcje['wyniki']
 
 df_wykres = df[df['paliwo'] == wybrane_paliwo].copy().tail(60)
 
@@ -256,7 +220,7 @@ fig.add_trace(go.Scatter(
 st.plotly_chart(fig, use_container_width=True)
 
 # ==========================================
-# 7. BAZA ARTYKUŁÓW (WIDOK TABELI)
+# 7. BAZA ARTYKUŁÓW (Rysuje się od razu!)
 # ==========================================
 st.divider()
 st.subheader("📰 Baza Analizowanych Wiadomości")
@@ -283,14 +247,68 @@ else:
 # ==========================================
 # 8. STOPKA (FOOTER)
 # ==========================================
-st.markdown("<br><br>", unsafe_allow_html=True) # Dodaje trochę pustego miejsca przed stopką
+st.markdown("<br><br>", unsafe_allow_html=True) 
 st.divider()
-# Wstrzykujemy kod HTML z atrybutem unsafe_allow_html=True, aby Streamlit wyrenderował odpowiednie kolory i marginesy
 st.markdown(
     """
     <div style='text-align: center; color: gray;'>
-        <small>Author: <b>Marcin Majborski</b> | Wszelkie prawa zastrzeżone &copy; 2026</small>
+        <small>Projekt i wykonanie: <b>Majbor1</b> | Wszelkie prawa zastrzeżone &copy; 2026</small>
     </div>
     """,
     unsafe_allow_html=True
 )
+
+# ==========================================
+# 9. MAGICZNA LOGIKA ŁADOWANIA (Na samym dole skryptu!)
+# ==========================================
+# Jeśli aktualizacja trwa, wypełniamy pojemnik animacją i CZEKAMY
+if st.session_state.trwa_aktualizacja:
+    for i in range(1, 121):
+        kropki = ". " * ((i % 3) + 1)
+        # Zapisujemy komunikat do pustego pudełka na samej górze!
+        pojemnik_na_ceny.info(f"⏳ Pobieranie najnowszych danych z rynku: {i} sek {kropki}")
+        time.sleep(1) # Kod zatrzymuje się tu co sekundę, ale reszta strony jest już narysowana!
+    
+    # Po 120 sekundach kończymy aktualizację i wymuszamy odświeżenie danych
+    st.session_state.trwa_aktualizacja = False
+    st.cache_data.clear()
+    st.rerun()
+
+# Jeśli aktualizacja NIE trwa, wypełniamy pudełko naszymi kafelkami z cenami
+else:
+    with pojemnik_na_ceny.container():
+        kolumny_kpi = st.columns(len(wyniki))
+        for (paliwo, dane), col in zip(wyniki.items(), kolumny_kpi):
+            ostatni_wiersz = df[df['paliwo'] == paliwo].iloc[-1]
+            cena_dzis_l = ostatni_wiersz['cena_dzis'] / 1000
+            prognoza_l = dane['prognoza_na_jutro'] / 1000
+            zmiana_l = prognoza_l - cena_dzis_l
+            
+            limit_val = None
+            if not df_max.empty:
+                p_lower = paliwo.lower()
+                kolumna_max = 'cena_max_pb95' if '95' in p_lower else ('cena_max_pb98' if '98' in p_lower else 'cena_max_on')
+                limit_row = df_max[df_max['data'] == jutro_str]
+                if not limit_row.empty:
+                    val = limit_row.iloc[0].get(kolumna_max)
+                    if pd.notna(val):
+                        limit_val = val
+            
+            with col:
+                if limit_val is not None:
+                    st.metric(
+                        label=f"🛡️ {paliwo.upper()} (Limit na jutro)",
+                        value=f"{limit_val:.2f} zł/l",
+                        delta=f"{zmiana_l:+.2f} zł/l (zmiana hurtowa)",
+                        delta_color="inverse" 
+                    )
+                    st.caption(f"🏭 Hurt dziś: **{cena_dzis_l:.2f} zł/l**")
+                    st.caption(f"🔮 Hurt jutro (AI): **{prognoza_l:.2f} zł/l**")
+                else:
+                    st.metric(
+                        label=f"🔮 {paliwo.upper()} (Hurt na jutro AI)",
+                        value=f"{prognoza_l:.2f} zł/l",
+                        delta=f"{zmiana_l:+.2f} zł/l (vs dziś)",
+                        delta_color="inverse"
+                    )
+                    st.caption(f"🏭 Hurt dziś: **{cena_dzis_l:.2f} zł/l**")
