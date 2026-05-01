@@ -75,9 +75,9 @@ if os.path.exists('data/orlen_master_table.csv'):
     ostatnia_aktualizacja = datetime.fromtimestamp(czas_modyfikacji)
     czas_od_aktualizacji = datetime.now() - ostatnia_aktualizacja
     
-    if czas_od_aktualizacji.total_seconds() < 60:
+    if czas_od_aktualizacji.total_seconds() < 3000:
         mozna_aktualizowac = False
-        minuty_do_konca = int((60 - czas_od_aktualizacji.total_seconds()))
+        minuty_do_konca = int((3000 - czas_od_aktualizacji.total_seconds()))
         komunikat_blokady = f"Następna aktualizacja możliwa za {minuty_do_konca} minut."
 
 # ==========================================
@@ -86,7 +86,7 @@ if os.path.exists('data/orlen_master_table.csv'):
 col_tytul, col_przycisk = st.columns([3, 1])
 
 with col_tytul:
-    st.subheader("🔮 Prognozy i Limity na JUTRO")
+    st.subheader("CENY PALIWA")
     if predykcje:
         st.caption(f"Ostatnia aktualizacja modelu: {predykcje.get('data_treningu', 'Brak daty')}")
 
@@ -98,7 +98,7 @@ with col_przycisk:
         if not token:
             st.error("Brak GITHUB_TOKEN w ustawieniach Streamlit!")
         else:
-            url = "https://api.github.com/repos/Majbor1/orlen_scraper/actions/workflows/orlen_bot.yml/dispatches"
+            url = "https://api.github.com/repos/Majbor1/orlen_scraper/actions/workflows/strona_bot.yml/dispatches"
             headers = {
                 "Accept": "application/vnd.github.v3+json",
                 "Authorization": f"token {token}"
@@ -111,7 +111,7 @@ with col_przycisk:
                 for i in range(120):
                     kropki = "." * ((i % 3) + 1)
                     status_placeholder.info(f"Pobieranie najnowszych danych{kropki}")
-                    time.sleep(1)
+                    time.sleep(3)
                 
                 st.cache_data.clear() 
                 st.rerun()            
@@ -154,8 +154,8 @@ for (paliwo, dane), col in zip(wyniki.items(), kolumny_kpi):
                 delta=f"{zmiana_l:+.2f} zł/l (zmiana hurtowa)",
                 delta_color="inverse" 
             )
-            st.caption(f"🏭 Hurt dziś: **{cena_dzis_l:.2f} zł/l**")
-            st.caption(f"🔮 Hurt jutro (AI): **{prognoza_l:.2f} zł/l**")
+            st.caption(f"Cena hurtowaurt dziś: **{cena_dzis_l:.2f} zł/l**")
+            st.caption(f"Szacowana cena hurtowa jutro: **{prognoza_l:.2f} zł/l**")
         else:
             st.metric(
                 label=f"🔮 {paliwo.upper()} (Hurt na jutro AI)",
@@ -163,14 +163,14 @@ for (paliwo, dane), col in zip(wyniki.items(), kolumny_kpi):
                 delta=f"{zmiana_l:+.2f} zł/l (vs dziś)",
                 delta_color="inverse"
             )
-            st.caption(f"🏭 Hurt dziś: **{cena_dzis_l:.2f} zł/l**")
+            st.caption(f"Cena hurtowa dziś: **{cena_dzis_l:.2f} zł/l**")
 
 st.divider()
 
 # ==========================================
 # 5. SYMULATOR CEN DETALICZNYCH
 # ==========================================
-st.subheader("🧮 Interaktywny Kalkulator Stacji (Cena na pylonie)")
+st.subheader("Interaktywny Kalkulator Stacji (Cena na pylonie)")
 
 col1, col2 = st.columns([1, 2])
 
