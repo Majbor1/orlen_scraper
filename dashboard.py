@@ -16,8 +16,13 @@ st.set_page_config(page_title="Orlen AI Dashboard", page_icon="⛽", layout="wid
 st.title("⛽ Orlen AI - Interaktywny Panel Analityczny")
 st.markdown("Monitoruj szacowane ceny na stacjach, prognozy AI i limity rządowe.")
 
+# Pamięć sesji dla animacji
 if 'trwa_aktualizacja' not in st.session_state:
     st.session_state.trwa_aktualizacja = False
+
+# Pamięć sesji dla czasu kliknięcia (Rozwiązanie naszego problemu)
+if 'ostatnie_klikniecie' not in st.session_state:
+    st.session_state.ostatnie_klikniecie = None
 
 # ==========================================
 # 2. FUNKCJE WCZYTUJĄCE DANE
@@ -69,12 +74,16 @@ predykcje = load_predictions()
 df_news = load_news()
 
 # ==========================================
-# 3. BLOKADA AKTUALIZACJI I KONWERSJA CZASU (POLSKA)
+# 3. ZAAWANSOWANA BLOKADA AKTUALIZACJI (JSON + SESJA)
 # ==========================================
 mozna_aktualizowac = True
 komunikat_blokady = ""
 data_treningu_wyswietlana = "Brak daty"
 
+# Zakładamy domyślnie, że od aktualizacji minęło mnóstwo czasu
+sekundy_od_aktualizacji = 999999
+
+# A. Odczytujemy czas z pliku JSON z modelu AI
 if predykcje and 'data_treningu' in predykcje:
     try:
         czas_oryginalny = pd.to_datetime(predykcje['data_treningu'])
@@ -85,14 +94,25 @@ if predykcje and 'data_treningu' in predykcje:
         data_treningu_wyswietlana = czas_polski.strftime("%Y-%m-%d %H:%M:%S")
         
         aktualny_czas_polski = pd.Timestamp.now(tz='Europe/Warsaw')
-        czas_od_aktualizacji = aktualny_czas_polski - czas_polski
+        sekundy_od_jsona = (aktualny_czas_polski - czas_polski).total_seconds()
         
-        if 0 <= czas_od_aktualizacji.total_seconds() < 600:
-            mozna_aktualizowac = False
-            minuty_do_konca = math.ceil((600 - czas_od_aktualizacji.total_seconds()) / 60)
-            komunikat_blokady = f"Następna aktualizacja możliwa za {minuty_do_konca} minut."
+        if sekundy_od_jsona >= 0:
+            sekundy_od_aktualizacji = sekundy_od_jsona
     except Exception as e:
         data_treningu_wyswietlana = predykcje.get('data_treningu', 'Brak daty')
+
+# B. Odczytujemy czas kliknięcia przycisku (jeśli strona nie zdążyła pobrać nowego pliku)
+if st.session_state.ostatnie_klikniecie is not None:
+    sekundy_od_kliku = (datetime.now() - st.session_state.ostatnie_klikniecie).total_seconds()
+    # Jeśli kliknięto przycisk niedawno (np. 120 sek temu), nadpisujemy stary czas z JSONa
+    if 0 <= sekundy_od_kliku < sekundy_od_aktualizacji:
+        sekundy_od_aktualizacji = sekundy_od_kliku
+
+# C. Ostateczna decyzja o zablokowaniu przycisku
+if sekundy_od_aktualizacji < 600:
+    mozna_aktualizowac = False
+    minuty_do_konca = math.ceil((600 - sekundy_od_aktualizacji) / 60)
+    komunikat_blokady = f"Następna aktualizacja możliwa za {minuty_do_konca} minut."
 
 # ==========================================
 # 4. KARTY Z PODSUMOWANIEM I PRZYCISK AKTUALIZACJI
@@ -100,7 +120,7 @@ if predykcje and 'data_treningu' in predykcje:
 col_tytul, col_przycisk = st.columns([3, 1])
 
 with col_tytul:
-    st.subheader(" Szacowane Ceny Detaliczne na JUTRO")
+    st.subheader("🔮 Szacowane Ceny Detaliczne na JUTRO")
     if predykcje:
         st.caption(f"Ostatnia aktualizacja modelu: {data_treningu_wyswietlana}")
 
@@ -121,6 +141,8 @@ with col_przycisk:
             resp = requests.post(url, headers=headers, json=data)
             
             if resp.status_code == 204:
+                # ZAPISUJEMY CZAS KLIKNIĘCIA DO PAMIĘCI
+                st.session_state.ostatnie_klikniecie = datetime.now()
                 st.session_state.trwa_aktualizacja = True
                 st.rerun()            
             else:
@@ -140,7 +162,7 @@ st.divider()
 # ==========================================
 # 5. INTERAKTYWNY WYKRES
 # ==========================================
-st.subheader(" Analiza Trendu (Ostatnie 60 dni)")
+st.subheader("📈 Analiza Trendu (Ostatnie 60 dni)")
 
 wybrane_paliwo = st.selectbox("Wybierz paliwo do wyświetlenia na wykresie:", df['paliwo'].unique())
 wyniki = predykcje['wyniki']
@@ -173,7 +195,7 @@ st.plotly_chart(fig, use_container_width=True)
 # 6. BAZA ARTYKUŁÓW (WIDOK TABELI)
 # ==========================================
 st.divider()
-st.subheader(" Baza Analizowanych Wiadomości")
+st.subheader("📰 Baza Analizowanych Wiadomości")
 st.markdown("Lista artykułów, na podstawie których AI analizowało nastroje rynkowe.")
 
 if not df_news.empty:
@@ -273,11 +295,10 @@ else:
             tekst_limit_dzis = f"{limit_dzis:.2f} zł/l" if limit_dzis else "Brak"
             tekst_limit_jutro = f"{limit_jutro:.2f} zł/l" if limit_jutro else "Brak"
             
-            # WYSWIETLANIE W KOLUMNIE (Kopia struktury z Pushover)
+            # WYSWIETLANIE W KOLUMNIE
             with col:
                 st.markdown(f"### ⛽ {paliwo.upper()}")
                 
-                # Decyzja - podświetlona kolorami
                 if roznica > 0.02:
                     st.error(f"**👉 DECYZJA:** 🔴 TANKUJ DZIŚ! (Jutro drożej o {roznica:.2f} zł/l)")
                 elif roznica < -0.02:
@@ -285,7 +306,6 @@ else:
                 else:
                     st.warning(f"**👉 DECYZJA:** 🟡 BEZ ZMIAN (Różnica: {roznica:+.2f} zł/l)")
                 
-                # Reszta danych wyświetlona za pomocą struktury listy Markdown
                 st.markdown(f"""
                 ** Cena maksymalna:**
                 * **Dziś ({dzis_str}):** {tekst_limit_dzis}
