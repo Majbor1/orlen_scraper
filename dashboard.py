@@ -5,6 +5,7 @@ import plotly.graph_objects as go
 import json
 import os
 import requests
+import time
 from datetime import datetime, timedelta
 
 # ==========================================
@@ -12,7 +13,7 @@ from datetime import datetime, timedelta
 # ==========================================
 st.set_page_config(page_title="Orlen AI Dashboard", page_icon="⛽", layout="wide")
 st.title("⛽ Orlen AI - Interaktywny Panel Analityczny")
-st.markdown("Monitoruj ceny hurtowe, prognozy Sztucznej Inteligencji i symuluj ceny detaliczne na stacjach.")
+st.markdown("Monitoruj ceny hurtowe, prognozy Sztucznej Inteligencji i limity rządowe.")
 
 # ==========================================
 # 2. FUNKCJE WCZYTUJĄCE DANE
@@ -64,7 +65,23 @@ predykcje = load_predictions()
 df_news = load_news()
 
 # ==========================================
-# 3. KARTY Z PODSUMOWANIEM I PRZYCISK AKTUALIZACJI
+# 3. BLOKADA AKTUALIZACJI (COOLDOWN 2H)
+# ==========================================
+mozna_aktualizowac = True
+komunikat_blokady = ""
+
+if os.path.exists('data/orlen_master_table.csv'):
+    czas_modyfikacji = os.path.getmtime('data/orlen_master_table.csv')
+    ostatnia_aktualizacja = datetime.fromtimestamp(czas_modyfikacji)
+    czas_od_aktualizacji = datetime.now() - ostatnia_aktualizacja
+    
+    if czas_od_aktualizacji.total_seconds() < 60:
+        mozna_aktualizowac = False
+        minuty_do_konca = int((60 - czas_od_aktualizacji.total_seconds()))
+        komunikat_blokady = f"Następna aktualizacja możliwa za {minuty_do_konca} minut."
+
+# ==========================================
+# 4. KARTY Z PODSUMOWANIEM I PRZYCISK AKTUALIZACJI
 # ==========================================
 col_tytul, col_przycisk = st.columns([3, 1])
 
@@ -75,28 +92,40 @@ with col_tytul:
 
 with col_przycisk:
     st.markdown("<br>", unsafe_allow_html=True) 
-    if st.button("🔄 Wymuś aktualizację bazy", type="primary", use_container_width=True):
+    
+    if st.button("🔄 Wymuś aktualizację bazy", type="primary", use_container_width=True, disabled=not mozna_aktualizowac):
         token = st.secrets.get("GITHUB_TOKEN")
         if not token:
             st.error("Brak GITHUB_TOKEN w ustawieniach Streamlit!")
         else:
-            with st.spinner("Wysyłam sygnał do bota..."):
-                url = "https://api.github.com/repos/Majbor1/orlen_scraper/actions/workflows/strona_bot.yml/dispatches"
-                headers = {
-                    "Accept": "application/vnd.github.v3+json",
-                    "Authorization": f"token {token}"
-                }
-                data = {"ref": "main"}
-                resp = requests.post(url, headers=headers, json=data)
-                if resp.status_code == 204:
-                    st.success("✅ Bot wystartował! Odśwież stronę za kilka minut.")
-                else:
-                    st.error(f"❌ Błąd: {resp.text}")
+            url = "https://api.github.com/repos/Majbor1/orlen_scraper/actions/workflows/orlen_bot.yml/dispatches"
+            headers = {
+                "Accept": "application/vnd.github.v3+json",
+                "Authorization": f"token {token}"
+            }
+            data = {"ref": "main"}
+            resp = requests.post(url, headers=headers, json=data)
+            
+            if resp.status_code == 204:
+                status_placeholder = st.empty()
+                for i in range(120):
+                    kropki = "." * ((i % 3) + 1)
+                    status_placeholder.info(f"Pobieranie najnowszych danych{kropki}")
+                    time.sleep(1)
+                
+                st.cache_data.clear() 
+                st.rerun()            
+            else:
+                st.error(f"❌ Błąd wysyłania: {resp.text}")
+                
+    if not mozna_aktualizowac:
+        st.caption(komunikat_blokady)
 
 if df.empty or predykcje is None:
     st.error("❌ Brak danych głównych. Uruchom bota!")
     st.stop()
 
+# Generowanie kafelków z cenami
 wyniki = predykcje['wyniki']
 kolumny_kpi = st.columns(len(wyniki))
 jutro_str = (datetime.now() + timedelta(days=1)).strftime('%Y-%m-%d')
@@ -107,7 +136,6 @@ for (paliwo, dane), col in zip(wyniki.items(), kolumny_kpi):
     prognoza_l = dane['prognoza_na_jutro'] / 1000
     zmiana_l = prognoza_l - cena_dzis_l
     
-    # Wyszukiwanie limitów
     limit_val = None
     if not df_max.empty:
         p_lower = paliwo.lower()
@@ -120,26 +148,27 @@ for (paliwo, dane), col in zip(wyniki.items(), kolumny_kpi):
     
     with col:
         if limit_val is not None:
-            # WARIANT 1: Wyświetl Cenę Rządową jako główną
             st.metric(
-                label=f"🛡️ {paliwo.upper()} (Cena Rządowa)",
+                label=f"🛡️ {paliwo.upper()} (Limit na jutro)",
                 value=f"{limit_val:.2f} zł/l",
-                delta=f"AI prognozuje: {prognoza_l:.2f} zł/l",
-                delta_color="off" # Szary kolor by pokazać info, a nie trend
+                delta=f"{zmiana_l:+.2f} zł/l (zmiana hurtowa)",
+                delta_color="inverse" 
             )
+            st.caption(f"🏭 Hurt dziś: **{cena_dzis_l:.2f} zł/l**")
+            st.caption(f"🔮 Hurt jutro (AI): **{prognoza_l:.2f} zł/l**")
         else:
-            # WARIANT 2: Brak Ceny Rządowej, Pokaż AI
             st.metric(
-                label=f"🔮 {paliwo.upper()} (Prognoza AI)",
+                label=f"🔮 {paliwo.upper()} (Hurt na jutro AI)",
                 value=f"{prognoza_l:.2f} zł/l",
-                delta=f"{zmiana_l:.2f} zł/l (vs dziś)",
+                delta=f"{zmiana_l:+.2f} zł/l (vs dziś)",
                 delta_color="inverse"
             )
+            st.caption(f"🏭 Hurt dziś: **{cena_dzis_l:.2f} zł/l**")
 
 st.divider()
 
 # ==========================================
-# 4. SYMULATOR CEN DETALICZNYCH
+# 5. SYMULATOR CEN DETALICZNYCH
 # ==========================================
 st.subheader("🧮 Interaktywny Kalkulator Stacji (Cena na pylonie)")
 
@@ -156,13 +185,17 @@ with col2:
     wyniki_detaliczne = []
     
     for paliwo in df['paliwo'].unique():
-        cena_hurt_l = df[df['paliwo'] == paliwo]['cena_dzis'].iloc[-1] / 1000
+        ostatni_wiersz = df[df['paliwo'] == paliwo].iloc[-1]
+        cena_hurt_l = ostatni_wiersz['cena_dzis'] / 1000
         marza = marza_on if 'on' in paliwo.lower() or 'diesel' in paliwo.lower() else marza_pb95
         
-        cena_netto = cena_hurt_l + KOSZTY_OPERACYJNE_NETTO + marza
-        cena_brutto = cena_netto * 1.23
+        pobrany_vat = ostatni_wiersz.get('vat', 8)
+        if pd.isna(pobrany_vat): pobrany_vat = 8
+        mnoznik_vat = 1 + (float(pobrany_vat) / 100)
         
-        # Odszukujemy znowu limit na potrzeby kalkulatora
+        cena_netto = cena_hurt_l + KOSZTY_OPERACYJNE_NETTO + marza
+        cena_brutto = cena_netto * mnoznik_vat
+        
         limit_val = None
         if not df_max.empty:
             p_lower = paliwo.lower()
@@ -177,10 +210,9 @@ with col2:
             "Paliwo": paliwo.upper(),
             "Hurt Netto (zł/l)": f"{cena_hurt_l:.2f}",
             "Twoja Marża Netto": f"{marza:.2f}",
-            "CENA NA PYLONIE": f"{cena_brutto:.2f} zł"
+            f"CENA NA PYLONIE ({int(pobrany_vat)}% VAT)": f"{cena_brutto:.2f} zł"
         }
 
-        # Jeśli jest limit państwowy, pokazujemy porównanie
         if limit_val is not None:
             roznica = limit_val - cena_brutto
             row_data["Limit Rządowy"] = f"{limit_val:.2f} zł"
@@ -193,7 +225,7 @@ with col2:
 st.divider()
 
 # ==========================================
-# 5. INTERAKTYWNY WYKRES
+# 6. INTERAKTYWNY WYKRES
 # ==========================================
 st.subheader("📈 Analiza Trendu (Ostatnie 60 dni)")
 
@@ -224,25 +256,41 @@ fig.add_trace(go.Scatter(
 st.plotly_chart(fig, use_container_width=True)
 
 # ==========================================
-# 6. BAZA ARTYKUŁÓW Z OCENAMI AI
+# 7. BAZA ARTYKUŁÓW (WIDOK TABELI)
 # ==========================================
 st.divider()
 st.subheader("📰 Baza Analizowanych Wiadomości")
-st.markdown("Surowe artykuły przeczytane i ocenione przez model AI (chronologicznie).")
+st.markdown("Lista artykułów, na podstawie których AI analizowało nastroje rynkowe.")
 
 if not df_news.empty:
-    kolumny_do_pokazania = [c for c in df_news.columns if c != 'tresc']
+    kolumny_do_pokazania = ['data', 'tytul', 'link']
+    dostepne_kolumny = [c for c in kolumny_do_pokazania if c in df_news.columns]
     
     st.dataframe(
-        df_news[kolumny_do_pokazania],
+        df_news[dostepne_kolumny],
         use_container_width=True, 
         hide_index=True,          
         height=400,
         column_config={
-            "link": st.column_config.LinkColumn("Otwórz artykuł"),
-            "panika_ai": st.column_config.ProgressColumn("Panika", format="%d", min_value=0, max_value=10),
-            "sukces_ai": st.column_config.ProgressColumn("Sukces", format="%d", min_value=0, max_value=10)
+            "data": st.column_config.TextColumn("Data publikacji"),
+            "tytul": st.column_config.TextColumn("Tytuł artykułu"),
+            "link": st.column_config.LinkColumn("Źródło (Otwórz artykuł)")
         }
     )
 else:
     st.info("Brak artykułów w bazie ocen.")
+
+# ==========================================
+# 8. STOPKA (FOOTER)
+# ==========================================
+st.markdown("<br><br>", unsafe_allow_html=True) # Dodaje trochę pustego miejsca przed stopką
+st.divider()
+# Wstrzykujemy kod HTML z atrybutem unsafe_allow_html=True, aby Streamlit wyrenderował odpowiednie kolory i marginesy
+st.markdown(
+    """
+    <div style='text-align: center; color: gray;'>
+        <small>Author: <b>Marcin Majborski</b> | Wszelkie prawa zastrzeżone &copy; 2026</small>
+    </div>
+    """,
+    unsafe_allow_html=True
+)
