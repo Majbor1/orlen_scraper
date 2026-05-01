@@ -69,7 +69,7 @@ predykcje = load_predictions()
 df_news = load_news()
 
 # ==========================================
-# 3. BLOKADA AKTUALIZACJI (COOLDOWN 2H)
+# 3. BLOKADA AKTUALIZACJI (COOLDOWN 10 MINUT)
 # ==========================================
 mozna_aktualizowac = True
 komunikat_blokady = ""
@@ -79,9 +79,10 @@ if os.path.exists('data/orlen_master_table.csv'):
     ostatnia_aktualizacja = datetime.fromtimestamp(czas_modyfikacji)
     czas_od_aktualizacji = datetime.now() - ostatnia_aktualizacja
     
-    if czas_od_aktualizacji.total_seconds() < 7200:
+    # 10 minut = 600 sekund
+    if czas_od_aktualizacji.total_seconds() < 600:
         mozna_aktualizowac = False
-        minuty_do_konca = int((7200 - czas_od_aktualizacji.total_seconds()) / 60)
+        minuty_do_konca = int((600 - czas_od_aktualizacji.total_seconds()) / 60)
         komunikat_blokady = f"Następna aktualizacja możliwa za {minuty_do_konca} minut."
 
 # ==========================================
@@ -97,13 +98,13 @@ with col_tytul:
 with col_przycisk:
     st.markdown("<br>", unsafe_allow_html=True) 
     
-    # Przycisk włącza tryb aktualizacji w pamięci sesji
     if st.button("🔄 Wymuś aktualizację bazy", type="primary", use_container_width=True, disabled=not mozna_aktualizowac or st.session_state.trwa_aktualizacja):
         token = st.secrets.get("GITHUB_TOKEN")
         if not token:
             st.error("Brak GITHUB_TOKEN w ustawieniach Streamlit!")
         else:
-            url = "https://api.github.com/repos/Majbor1/orlen_scraper/actions/workflows/orlen_bot.yml/dispatches"
+            # Zmodyfikowany URL uderzający do 'strona_bot.yml'
+            url = "https://api.github.com/repos/Majbor1/orlen_scraper/actions/workflows/strona_bot.yml/dispatches"
             headers = {
                 "Accept": "application/vnd.github.v3+json",
                 "Authorization": f"token {token}"
@@ -112,7 +113,6 @@ with col_przycisk:
             resp = requests.post(url, headers=headers, json=data)
             
             if resp.status_code == 204:
-                # Zapisujemy w pamięci, że zaczęliśmy aktualizację i odświeżamy stronę
                 st.session_state.trwa_aktualizacja = True
                 st.rerun()            
             else:
@@ -125,12 +125,12 @@ if df.empty or predykcje is None:
     st.error("❌ Brak danych głównych. Uruchom bota!")
     st.stop()
 
-# TWORZYMY PUSTE PUDEŁKO NA CENY LUB ANIMACJĘ
+# Puste pudełko na układ kafelków
 pojemnik_na_ceny = st.empty()
 st.divider()
 
 # ==========================================
-# 5. SYMULATOR CEN DETALICZNYCH (Rysuje się od razu!)
+# 5. SYMULATOR CEN DETALICZNYCH
 # ==========================================
 st.subheader("🧮 Interaktywny Kalkulator Stacji (Cena na pylonie)")
 
@@ -188,7 +188,7 @@ with col2:
 st.divider()
 
 # ==========================================
-# 6. INTERAKTYWNY WYKRES (Rysuje się od razu!)
+# 6. INTERAKTYWNY WYKRES
 # ==========================================
 st.subheader("📈 Analiza Trendu (Ostatnie 60 dni)")
 
@@ -220,7 +220,7 @@ fig.add_trace(go.Scatter(
 st.plotly_chart(fig, use_container_width=True)
 
 # ==========================================
-# 7. BAZA ARTYKUŁÓW (Rysuje się od razu!)
+# 7. BAZA ARTYKUŁÓW (WIDOK TABELI)
 # ==========================================
 st.divider()
 st.subheader("📰 Baza Analizowanych Wiadomości")
@@ -259,22 +259,17 @@ st.markdown(
 )
 
 # ==========================================
-# 9. MAGICZNA LOGIKA ŁADOWANIA (Na samym dole skryptu!)
+# 9. MAGICZNA LOGIKA ŁADOWANIA Z KROPKAMI
 # ==========================================
-# Jeśli aktualizacja trwa, wypełniamy pojemnik animacją i CZEKAMY
 if st.session_state.trwa_aktualizacja:
     for i in range(1, 121):
         kropki = ". " * ((i % 3) + 1)
-        # Zapisujemy komunikat do pustego pudełka na samej górze!
         pojemnik_na_ceny.info(f"⏳ Pobieranie najnowszych danych z rynku: {i} sek {kropki}")
-        time.sleep(1) # Kod zatrzymuje się tu co sekundę, ale reszta strony jest już narysowana!
+        time.sleep(1) 
     
-    # Po 120 sekundach kończymy aktualizację i wymuszamy odświeżenie danych
     st.session_state.trwa_aktualizacja = False
     st.cache_data.clear()
     st.rerun()
-
-# Jeśli aktualizacja NIE trwa, wypełniamy pudełko naszymi kafelkami z cenami
 else:
     with pojemnik_na_ceny.container():
         kolumny_kpi = st.columns(len(wyniki))
