@@ -82,7 +82,7 @@ if os.path.exists('data/orlen_master_table.csv'):
     # 10 minut = 600 sekund
     if czas_od_aktualizacji.total_seconds() < 600:
         mozna_aktualizowac = False
-        minuty_do_konca = int((600 - czas_od_aktualizacji.total_seconds()) / 60)
+        minuty_do_konca = int((600 - predykcje.get('data_treningu', 'Brak daty')) / 60)
         komunikat_blokady = f"Następna aktualizacja możliwa za {minuty_do_konca} minut."
 
 # ==========================================
