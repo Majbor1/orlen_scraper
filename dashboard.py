@@ -77,7 +77,7 @@ if os.path.exists('data/orlen_master_table.csv'):
     
     if czas_od_aktualizacji.total_seconds() < 3000:
         mozna_aktualizowac = False
-        minuty_do_konca = int((3000 - czas_od_aktualizacji.total_seconds()))
+        minuty_do_konca = int((3000 - czas_od_aktualizacji.total_seconds()/60))
         komunikat_blokady = f"Następna aktualizacja możliwa za {minuty_do_konca} minut."
 
 # ==========================================
