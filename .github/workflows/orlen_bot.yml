@@ -35,6 +35,7 @@ jobs:
           scrapy crawl pap_orlen
           scrapy crawl tvn24_orlen
           scrapy crawl cena_max_mp
+          python kalkulator_detaliczny.py
           python czyszczenie_danych.py
           python ocena_ai.py
           python buduj_tabele.py

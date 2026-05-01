@@ -1,6 +1,6 @@
 @echo off
 echo =========================================
-echo  URUCHAMIAM SYSTEM PREDYKCYJNY ORLEN
+echo  URUCHAMIAM kalkulator detaliczny CEN
 echo =========================================
 
 :: Bezpieczne i wymuszone wejscie do folderu
@@ -32,7 +32,3 @@ echo =========================================
 echo  ZAKONCZONO POMYSLNIE! 
 echo =========================================
 
-:: Wychodzimy ze srodowiska
-call deactivate
-
-pause

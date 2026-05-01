@@ -55,6 +55,7 @@ python trenuj_model.py
 
 echo.
 echo [9/9] Wysyłame powiadomienie
+python kalkulator_detaliczny.py
 python powiadomienia.py
 
 echo.

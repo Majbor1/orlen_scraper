@@ -1,6 +1,6 @@
 @echo off
 echo =========================================
-echo  URUCHAMIAM SYSTEM PREDYKCYJNY ORLEN
+echo  URUCHAMIAM SYSTEM PREDYKCYJNY ORLEN (TEST)
 echo =========================================
 
 :: Bezpieczne i wymuszone wejscie do folderu
@@ -21,7 +21,7 @@ if exist ".venv_pc\Scripts\activate.bat" (
 
 echo.
 echo [2/8] Pobieranie ceny maksymalnej z Monitora Polskiego
-python -m scrapy crawl cena_max_mp
+call kalkulator_cen.bat
 
 echo.
 echo [4/8] Czyszczenie i filtrowanie zeskrapowanych tekstow...
