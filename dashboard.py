@@ -6,6 +6,7 @@ import json
 import os
 import requests
 import time
+import math
 from datetime import datetime, timedelta
 
 # ==========================================
@@ -15,7 +16,7 @@ st.set_page_config(page_title="Orlen AI Dashboard", page_icon="⛽", layout="wid
 st.title("⛽ Orlen AI - Interaktywny Panel Analityczny")
 st.markdown("Monitoruj ceny hurtowe, prognozy Sztucznej Inteligencji i limity rządowe.")
 
-# Zmienna w pamięci przeglądarki, która wie, czy bot aktualnie pracuje
+# Zmienna w pamięci przeglądarki do zarządzania animacją ładowania
 if 'trwa_aktualizacja' not in st.session_state:
     st.session_state.trwa_aktualizacja = False
 
@@ -69,21 +70,32 @@ predykcje = load_predictions()
 df_news = load_news()
 
 # ==========================================
-# 3. BLOKADA AKTUALIZACJI (COOLDOWN 10 MINUT)
+# 3. BLOKADA AKTUALIZACJI (OPARTA O DATĘ Z MODELU AI)
 # ==========================================
 mozna_aktualizowac = True
 komunikat_blokady = ""
 
-if os.path.exists('data/orlen_master_table.csv'):
-    czas_modyfikacji = os.path.getmtime('data/orlen_master_table.csv')
-    ostatnia_aktualizacja = datetime.fromtimestamp(czas_modyfikacji)
-    czas_od_aktualizacji = datetime.now() - ostatnia_aktualizacja
-    
-    # 10 minut = 600 sekund
-    if czas_od_aktualizacji.total_seconds() < 600:
-        mozna_aktualizowac = False
-        minuty_do_konca = int((600 - predykcje.get('data_treningu', 'Brak daty')) / 60)
-        komunikat_blokady = f"Następna aktualizacja możliwa za {minuty_do_konca} minut."
+# Sprawdzamy czas od ostatniego udanego pobrania danych przez AI
+if predykcje and 'data_treningu' in predykcje:
+    try:
+        # Konwersja tekstu z JSON-a na obiekt daty i czasu
+        ostatnia_aktualizacja = pd.to_datetime(predykcje['data_treningu'])
+        
+        # Jeśli data z JSON-a zawiera strefę czasową, usuwamy ją, by łatwiej porównać z czasem lokalnym
+        if ostatnia_aktualizacja.tzinfo is not None:
+            ostatnia_aktualizacja = ostatnia_aktualizacja.tz_localize(None)
+            
+        czas_od_aktualizacji = datetime.now() - ostatnia_aktualizacja
+        
+        # 10 minut = 600 sekund
+        if 0 <= czas_od_aktualizacji.total_seconds() < 600:
+            mozna_aktualizowac = False
+            # Używamy math.ceil, aby zawsze zaokrąglać w górę (np. 9.1 -> 10 minut)
+            minuty_do_konca = math.ceil((600 - czas_od_aktualizacji.total_seconds()) / 60)
+            komunikat_blokady = f"Następna aktualizacja możliwa za {minuty_do_konca} minut."
+    except Exception as e:
+        # Jeśli napotkamy nietypowy format daty, przepuszczamy, by nie zablokować aplikacji
+        pass
 
 # ==========================================
 # 4. KARTY Z PODSUMOWANIEM I PRZYCISK AKTUALIZACJI
@@ -103,7 +115,6 @@ with col_przycisk:
         if not token:
             st.error("Brak GITHUB_TOKEN w ustawieniach Streamlit!")
         else:
-            # Zmodyfikowany URL uderzający do 'strona_bot.yml'
             url = "https://api.github.com/repos/Majbor1/orlen_scraper/actions/workflows/strona_bot.yml/dispatches"
             headers = {
                 "Accept": "application/vnd.github.v3+json",
@@ -113,6 +124,7 @@ with col_przycisk:
             resp = requests.post(url, headers=headers, json=data)
             
             if resp.status_code == 204:
+                # Blokujemy interfejs tylko na czas trwania aktualizacji
                 st.session_state.trwa_aktualizacja = True
                 st.rerun()            
             else:
