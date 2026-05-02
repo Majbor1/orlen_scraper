@@ -1,4 +1,4 @@
-name: Orlen AI Bot Automation
+name: Orlen Website Bot 
 
 on:
   workflow_dispatch: 
