@@ -1,8 +1,6 @@
 name: Orlen AI Bot Automation
 
 on:
-  schedule:
-    - cron: '0 9,18 * * *'
   workflow_dispatch: 
 jobs:
   build:
