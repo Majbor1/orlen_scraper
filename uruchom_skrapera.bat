@@ -24,8 +24,8 @@ echo [1/9] Pobieranie dzisiejszych cen hurtowych Orlen...
 python -m scrapy crawl hurtowe_orlen
 
 echo.
-echo [2/9] Pobieranie ceny maksymalnej z Monitora Polskiego
-python -m scrapy crawl cena_max_mp
+echo [2/8] Pobieranie ceny maksymalnej z Monitora Polskiego
+call kalkulator_cen.bat
 
 echo.
 echo [3/9] Pobieranie wiadomosci ze wszystkich portali...
@@ -56,7 +56,7 @@ python trenuj_model_2.py
 echo.
 echo [9/9] Wysyłame powiadomienie
 python kalkulator_detaliczny.py
-python powiadomienia.py
+
 
 echo.
 echo =========================================
