@@ -41,7 +41,7 @@ python buduj_tabele.py
 
 echo.
 echo [8/9] Trenuje model AI na swiezych danych i rysuje wykres...
-python trenuj_model.py
+python trenuj_model_2.py
 
 echo.
 echo [9/9] Wysylam powiadomienie
