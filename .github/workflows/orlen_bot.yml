@@ -28,6 +28,7 @@ jobs:
           GEMINI_API_KEY_2: ${{ secrets.GEMINI_API_KEY_2 }}
           APP_TOKEN: ${{ secrets.APP_TOKEN }}
           USER_KEY: ${{ secrets.USER_KEY }}
+          ENCRYPTION_KEY: ${{ secrets.ENCRYPTION_KEY }}
         run: |
           # Kolejność uruchamiania skryptów
           scrapy crawl hurtowe_orlen
