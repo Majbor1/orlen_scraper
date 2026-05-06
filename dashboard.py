@@ -7,6 +7,8 @@ import os
 import requests
 import time
 import math
+import requests
+import base64
 from datetime import datetime, timedelta
 from cryptography.fernet import Fernet
 
@@ -218,12 +220,12 @@ else:
     st.info("Brak artykułów w bazie ocen.")
 
 # ==========================================
-# 9. FORMULARZ ZAPISU NA POWIADOMIENIA
+# 9. FORMULARZ ZAPISU NA POWIADOMIENIA (GitHub API)
 # ==========================================
 st.divider()
 st.subheader("🔔 Zapisz się na powiadomienia o cenach!")
 
-with st.expander("🔒 Jak dbamy o Twoje bezpieczeństwo?"):
+with st.expander("🔒 Jak dbamy o Twoje bezpieczeństwo? (Szyfrowanie Danych)"):
     st.markdown("""
     **Twoje dane są u nas w 100% bezpieczne.**
     
@@ -232,29 +234,67 @@ with st.expander("🔒 Jak dbamy o Twoje bezpieczeństwo?"):
     W praktyce oznacza to, że Twój klucz Pushover jest natychmiast szyfrowany zaawansowanym algorytmem kryptograficznym, zanim jeszcze trafi do naszej bazy danych. Nikt – włączając w to administratorów systemu – nie ma możliwości odczytania Twojego oryginalnego, surowego klucza.
     """)
 
-st.markdown("Chcesz codziennie rano wiedzieć, czy opłaca się dziś tankować? Zostaw swój klucz Pushover!")
-
 with st.form("formularz_subskrypcji", clear_on_submit=True):
-    imie = st.text_input("Podaj swoje imie", type="text")
     nowy_klucz = st.text_input("Wklej swój Pushover User Key:", type="password") 
-    
-    przycisk_zapisu = st.form_submit_button("Zaszyfruj i zapisz mnie do bazy!", type="primary")
+    przycisk_zapisu = st.form_submit_button("Zaszyfruj i zapisz mnie!", type="primary")
 
     if przycisk_zapisu:
         if len(nowy_klucz) >= 15:
             try:
-                # Szyfrowanie klucza użytkownika
+                # 1. Szyfrowanie klucza
                 klucz_szyfrujacy = st.secrets["ENCRYPTION_KEY"]
                 fernet = Fernet(klucz_szyfrujacy)
                 zaszyfrowany_klucz = fernet.encrypt(nowy_klucz.encode()).decode()
                 
-                st.success("🎉 Super! Twój klucz został pomyślnie zaszyfrowany i przygotowany do zapisu.")
-                st.caption(f"Twój zaszyfrowany klucz w bazie wygląda tak: {zaszyfrowany_klucz[:20]}...")
+                # 2. Ustawienia API GitHuba
+                github_token = st.secrets["GITHUB_TOKEN"]
+                # UWAGA: Upewnij się, że nazwa repozytorium poniżej jest w 100% poprawna (TwojLogin/NazwaProjektu)
+                repozytorium = "Majbor1/orlen_scraper" 
+                sciezka_pliku = "data/subskrybenci.txt"
                 
-                # Zapis do Bazy Danych (Supabase - w kolejnym kroku)
+                url_api = f"https://api.github.com/repos/{repozytorium}/contents/{sciezka_pliku}"
+                naglowki = {
+                    "Authorization": f"token {github_token}",
+                    "Accept": "application/vnd.github.v3+json"
+                }
+
+                # 3. Krok A: Pobranie obecnego pliku z GitHuba (jeśli istnieje)
+                odpowiedz_get = requests.get(url_api, headers=naglowki)
+                obecny_tekst = ""
+                sha_pliku = None
+
+                if odpowiedz_get.status_code == 200:
+                    dane_pliku = odpowiedz_get.json()
+                    sha_pliku = dane_pliku['sha'] # SHA to "odcisk palca" pliku, wymagany przez GitHuba do nadpisania
+                    # GitHub zwraca treść zakodowaną w Base64, musimy ją odkodować
+                    obecny_tekst = base64.b64decode(dane_pliku['content']).decode('utf-8')
                 
-            except KeyError:
-                st.error("❌ Błąd konfiguracji serwera: Brak klucza szyfrującego (ENCRYPTION_KEY) w Secrets!")
+                # 4. Krok B: Dodanie nowego klucza na końcu tekstu
+                nowy_tekst = obecny_tekst + zaszyfrowany_klucz + "\n"
+                
+                # 5. Krok C: Wysłanie nowego pliku na GitHuba
+                tekst_zakodowany = base64.b64encode(nowy_tekst.encode('utf-8')).decode('utf-8')
+                dane_do_wyslania = {
+                    "message": "Strona: Dodano nowego subskrybenta do powiadomień",
+                    "content": tekst_zakodowany,
+                    "branch": "main"
+                }
+                
+                # Jeśli plik już istniał, musimy dołączyć jego SHA
+                if sha_pliku:
+                    dane_do_wyslania["sha"] = sha_pliku
+                    
+                odpowiedz_put = requests.put(url_api, headers=naglowki, json=dane_do_wyslania)
+                
+                if odpowiedz_put.status_code in [200, 201]:
+                    st.success("🎉 Super! Twój klucz został zaszyfrowany i zapisany w chmurze.")
+                else:
+                    st.error(f"❌ Błąd GitHuba: {odpowiedz_put.json().get('message')}")
+                
+            except KeyError as e:
+                st.error(f"❌ Błąd konfiguracji: Brak klucza {e} w ustawieniach Streamlit!")
+            except Exception as e:
+                st.error(f"❌ Wystąpił niespodziewany błąd: {e}")
         else:
             st.error("❌ Wprowadzony klucz jest za krótki. Sprawdź go ponownie.")
 
