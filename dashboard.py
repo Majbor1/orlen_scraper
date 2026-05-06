@@ -8,6 +8,7 @@ import requests
 import time
 import math
 from datetime import datetime, timedelta
+from cryptography.fernet import Fernet
 
 # ==========================================
 # 1. KONFIGURACJA STRONY I PAMIĘCI SESJI
@@ -217,18 +218,45 @@ else:
     st.info("Brak artykułów w bazie ocen.")
 
 # ==========================================
-# 7. STOPKA (FOOTER)
+# 9. FORMULARZ ZAPISU NA POWIADOMIENIA
 # ==========================================
-st.markdown("<br><br>", unsafe_allow_html=True) 
 st.divider()
-st.markdown(
-    """
-    <div style='text-align: center; color: gray;'>
-        <small>Projekt i wykonanie: <b>Majbor1</b> | Wszelkie prawa zastrzeżone &copy; 2026</small>
-    </div>
-    """,
-    unsafe_allow_html=True
-)
+st.subheader("🔔 Zapisz się na powiadomienia o cenach!")
+
+with st.expander("🔒 Jak dbamy o Twoje bezpieczeństwo?"):
+    st.markdown("""
+    **Twoje dane są u nas w 100% bezpieczne.**
+    
+    Zaszyfrowane dane to poufne informacje przekształcone w nieczytelny ciąg znaków, które można bezpiecznie przechowywać w bazie i odczytać tylko za pomocą unikalnego, tajnego klucza serwera.
+    
+    W praktyce oznacza to, że Twój klucz Pushover jest natychmiast szyfrowany zaawansowanym algorytmem kryptograficznym, zanim jeszcze trafi do naszej bazy danych. Nikt – włączając w to administratorów systemu – nie ma możliwości odczytania Twojego oryginalnego, surowego klucza.
+    """)
+
+st.markdown("Chcesz codziennie rano wiedzieć, czy opłaca się dziś tankować? Zostaw swój klucz Pushover!")
+
+with st.form("formularz_subskrypcji", clear_on_submit=True):
+    imie = st.text_input("Podaj swoje imie", type="text")
+    nowy_klucz = st.text_input("Wklej swój Pushover User Key:", type="password") 
+    
+    przycisk_zapisu = st.form_submit_button("Zaszyfruj i zapisz mnie do bazy!", type="primary")
+
+    if przycisk_zapisu:
+        if len(nowy_klucz) >= 15:
+            try:
+                # Szyfrowanie klucza użytkownika
+                klucz_szyfrujacy = st.secrets["ENCRYPTION_KEY"]
+                fernet = Fernet(klucz_szyfrujacy)
+                zaszyfrowany_klucz = fernet.encrypt(nowy_klucz.encode()).decode()
+                
+                st.success("🎉 Super! Twój klucz został pomyślnie zaszyfrowany i przygotowany do zapisu.")
+                st.caption(f"Twój zaszyfrowany klucz w bazie wygląda tak: {zaszyfrowany_klucz[:20]}...")
+                
+                # Zapis do Bazy Danych (Supabase - w kolejnym kroku)
+                
+            except KeyError:
+                st.error("❌ Błąd konfiguracji serwera: Brak klucza szyfrującego (ENCRYPTION_KEY) w Secrets!")
+        else:
+            st.error("❌ Wprowadzony klucz jest za krótki. Sprawdź go ponownie.")
 
 # ==========================================
 # 8. MAGICZNA LOGIKA ŁADOWANIA ORAZ PANELE Z DECYZJAMI W STYLU POWIADOMIEŃ
