@@ -241,14 +241,13 @@ with st.form("formularz_subskrypcji", clear_on_submit=True):
     if przycisk_zapisu:
         if len(nowy_klucz) >= 15:
             try:
-                # 1. Szyfrowanie klucza
+                # 1. Pobranie kluczy systemowych
                 klucz_szyfrujacy = st.secrets["ENCRYPTION_KEY"]
+                admin_key = st.secrets["USER_KEY"] # Pobieramy Twój tajny klucz z env/secrets
                 fernet = Fernet(klucz_szyfrujacy)
-                zaszyfrowany_klucz = fernet.encrypt(nowy_klucz.encode()).decode()
                 
                 # 2. Ustawienia API GitHuba
                 github_token = st.secrets["GITHUB_TOKEN"]
-                # UWAGA: Upewnij się, że nazwa repozytorium poniżej jest w 100% poprawna (TwojLogin/NazwaProjektu)
                 repozytorium = "Majbor1/orlen_scraper" 
                 sciezka_pliku = "data/subskrybenci.txt"
                 
@@ -258,45 +257,64 @@ with st.form("formularz_subskrypcji", clear_on_submit=True):
                     "Accept": "application/vnd.github.v3+json"
                 }
 
-                # 3. Krok A: Pobranie obecnego pliku z GitHuba (jeśli istnieje)
-                odpowiedz_get = requests.get(url_api, headers=naglowki)
-                obecny_tekst = ""
-                sha_pliku = None
-
-                if odpowiedz_get.status_code == 200:
-                    dane_pliku = odpowiedz_get.json()
-                    sha_pliku = dane_pliku['sha'] # SHA to "odcisk palca" pliku, wymagany przez GitHuba do nadpisania
-                    # GitHub zwraca treść zakodowaną w Base64, musimy ją odkodować
-                    obecny_tekst = base64.b64decode(dane_pliku['content']).decode('utf-8')
+                # --- LOGIKA WERYFIKACJI ---
                 
-                # 4. Krok B: Dodanie nowego klucza na końcu tekstu
-                nowy_tekst = obecny_tekst + zaszyfrowany_klucz + "\n"
+                # A. Sprawdzenie, czy to nie jest klucz Administratora
+                if nowy_klucz == admin_key:
+                    st.info("💡 Jesteś administratorem tego systemu. Twoje urządzenie jest już na liście głównej i nie musi się dodatkowo zapisywać!")
                 
-                # 5. Krok C: Wysłanie nowego pliku na GitHuba
-                tekst_zakodowany = base64.b64encode(nowy_tekst.encode('utf-8')).decode('utf-8')
-                dane_do_wyslania = {
-                    "message": "Strona: Dodano nowego subskrybenta do powiadomień",
-                    "content": tekst_zakodowany,
-                    "branch": "main"
-                }
-                
-                # Jeśli plik już istniał, musimy dołączyć jego SHA
-                if sha_pliku:
-                    dane_do_wyslania["sha"] = sha_pliku
-                    
-                odpowiedz_put = requests.put(url_api, headers=naglowki, json=dane_do_wyslania)
-                
-                if odpowiedz_put.status_code in [200, 201]:
-                    st.success("🎉 Super! Twój klucz został zaszyfrowany i zapisany w chmurze.")
                 else:
-                    st.error(f"❌ Błąd GitHuba: {odpowiedz_put.json().get('message')}")
+                    # B. Pobranie pliku z GitHuba i sprawdzenie duplikatów
+                    odpowiedz_get = requests.get(url_api, headers=naglowki)
+                    obecny_tekst = ""
+                    sha_pliku = None
+                    czy_klucz_juz_istnieje = False
+
+                    if odpowiedz_get.status_code == 200:
+                        dane_pliku = odpowiedz_get.json()
+                        sha_pliku = dane_pliku['sha']
+                        obecny_tekst = base64.b64decode(dane_pliku['content']).decode('utf-8')
+                        
+                        istniejace_linie = obecny_tekst.splitlines()
+                        for linia in istniejace_linie:
+                            if linia.strip():
+                                try:
+                                    odkodowany_z_bazy = fernet.decrypt(linia.encode()).decode()
+                                    if odkodowany_z_bazy == nowy_klucz:
+                                        czy_klucz_juz_istnieje = True
+                                        break
+                                except:
+                                    pass
+
+                    if czy_klucz_juz_istnieje:
+                        st.warning("⚠️ Ten klucz jest już zapisany w naszej bazie!")
+                    else:
+                        # C. Zapis nowego klucza (skoro nie jest adminem i nie ma go w bazie)
+                        zaszyfrowany_klucz = fernet.encrypt(nowy_klucz.encode()).decode()
+                        nowy_tekst = obecny_tekst + zaszyfrowany_klucz + "\n"
+                        
+                        tekst_zakodowany = base64.b64encode(nowy_tekst.encode('utf-8')).decode('utf-8')
+                        dane_do_wyslania = {
+                            "message": "Strona: Dodano nowego subskrybenta",
+                            "content": tekst_zakodowany,
+                            "branch": "main"
+                        }
+                        if sha_pliku:
+                            dane_do_wyslania["sha"] = sha_pliku
+                            
+                        odpowiedz_put = requests.put(url_api, headers=naglowki, json=dane_do_wyslania)
+                        
+                        if odpowiedz_put.status_code in [200, 201]:
+                            st.success("🎉 Super! Twój klucz został zaszyfrowany i dopisany do listy powiadomień.")
+                        else:
+                            st.error(f"❌ Błąd zapisu: {odpowiedz_put.json().get('message')}")
                 
             except KeyError as e:
-                st.error(f"❌ Błąd konfiguracji: Brak klucza {e} w ustawieniach Streamlit!")
+                st.error(f"❌ Błąd konfiguracji: Brak klucza {e} w ustawieniach (Secrets)!")
             except Exception as e:
-                st.error(f"❌ Wystąpił niespodziewany błąd: {e}")
+                st.error(f"❌ Wystąpił błąd: {e}")
         else:
-            st.error("❌ Wprowadzony klucz jest za krótki. Sprawdź go ponownie.")
+            st.error("❌ Klucz jest za krótki. Sprawdź go ponownie.")
 
 # ==========================================
 # 8. MAGICZNA LOGIKA ŁADOWANIA ORAZ PANELE Z DECYZJAMI W STYLU POWIADOMIEŃ
