@@ -223,98 +223,120 @@ else:
 # 9. FORMULARZ ZAPISU NA POWIADOMIENIA (GitHub API)
 # ==========================================
 st.divider()
-st.subheader("🔔 Zapisz się na powiadomienia o cenach!")
+tab1, tab2 = st.tabs(["🔔 Zapisz się", "❌ Usuń subskrypcję"])
 
-with st.expander("🔒 Jak dbamy o Twoje bezpieczeństwo? (Szyfrowanie Danych)"):
-    st.markdown("""
-    **Twoje dane są u nas w 100% bezpieczne.**
-    
-    Zaszyfrowane dane to poufne informacje przekształcone w nieczytelny ciąg znaków, które można bezpiecznie przechowywać w bazie i odczytać tylko za pomocą unikalnego, tajnego klucza serwera.
-    
-    W praktyce oznacza to, że Twój klucz Pushover jest natychmiast szyfrowany zaawansowanym algorytmem kryptograficznym, zanim jeszcze trafi do naszej bazy danych. Nikt – włączając w to administratorów systemu – nie ma możliwości odczytania Twojego oryginalnego, surowego klucza.
-    """)
+# --- TAB 1: ZAPISYWANIE ---
+with tab1:
+    st.subheader("Zapisz się na powiadomienia")
+    with st.form("form_zapis", clear_on_submit=True):
+        nowy_nick = st.text_input("Twój Nick / Login (np. Marcin):")
+        nowy_klucz = st.text_input("Klucz Pushover User Key:", type="password")
+        submit_zapis = st.form_submit_button("Zaszyfruj i zapisz mnie!")
 
-with st.form("formularz_subskrypcji", clear_on_submit=True):
-    nowy_klucz = st.text_input("Wklej swój Pushover User Key:", type="password") 
-    przycisk_zapisu = st.form_submit_button("Zaszyfruj i zapisz mnie!", type="primary")
-
-    if przycisk_zapisu:
-        if len(nowy_klucz) >= 15:
+    if submit_zapis:
+        if len(nowy_nick) > 2 and len(nowy_klucz) >= 15:
             try:
-                # 1. Pobranie kluczy systemowych
                 klucz_szyfrujacy = st.secrets["ENCRYPTION_KEY"]
-                admin_key = st.secrets["USER_KEY"] # Pobieramy Twój tajny klucz z env/secrets
+                admin_key = st.secrets["USER_KEY"]
                 fernet = Fernet(klucz_szyfrujacy)
                 
-                # 2. Ustawienia API GitHuba
-                github_token = st.secrets["GITHUB_TOKEN"]
-                repozytorium = "Majbor1/orlen_scraper" 
-                sciezka_pliku = "data/subskrybenci.txt"
-                
-                url_api = f"https://api.github.com/repos/{repozytorium}/contents/{sciezka_pliku}"
-                naglowki = {
-                    "Authorization": f"token {github_token}",
-                    "Accept": "application/vnd.github.v3+json"
-                }
-
-                # --- LOGIKA WERYFIKACJI ---
-                
-                # A. Sprawdzenie, czy to nie jest klucz Administratora
+                # Sprawdzenie czy to nie Admin
                 if nowy_klucz == admin_key:
-                    st.info("💡 Jesteś administratorem tego systemu. Twoje urządzenie jest już na liście głównej i nie musi się dodatkowo zapisywać!")
-                
+                    st.info("💡 Jesteś administratorem, nie musisz się zapisywać!")
                 else:
-                    # B. Pobranie pliku z GitHuba i sprawdzenie duplikatów
-                    odpowiedz_get = requests.get(url_api, headers=naglowki)
+                    github_token = st.secrets["GITHUB_TOKEN"]
+                    repo = "Majbor1/orlen_scraper"
+                    path = "data/subskrybenci.txt"
+                    url = f"https://api.github.com/repos/{repo}/contents/{path}"
+                    headers = {"Authorization": f"token {github_token}", "Accept": "application/vnd.github.v3+json"}
+
+                    res_get = requests.get(url, headers=headers)
                     obecny_tekst = ""
-                    sha_pliku = None
-                    czy_klucz_juz_istnieje = False
+                    sha = None
+                    duplikat = False
 
-                    if odpowiedz_get.status_code == 200:
-                        dane_pliku = odpowiedz_get.json()
-                        sha_pliku = dane_pliku['sha']
-                        obecny_tekst = base64.b64decode(dane_pliku['content']).decode('utf-8')
+                    if res_get.status_code == 200:
+                        data = res_get.json()
+                        sha = data['sha']
+                        obecny_tekst = base64.b64decode(data['content']).decode('utf-8')
                         
-                        istniejace_linie = obecny_tekst.splitlines()
-                        for linia in istniejace_linie:
-                            if linia.strip():
-                                try:
-                                    odkodowany_z_bazy = fernet.decrypt(linia.encode()).decode()
-                                    if odkodowany_z_bazy == nowy_klucz:
-                                        czy_klucz_juz_istnieje = True
-                                        break
-                                except:
-                                    pass
+                        for linia in obecny_tekst.splitlines():
+                            try:
+                                dec = fernet.decrypt(linia.encode()).decode()
+                                if ":" in dec and dec.split(":")[1] == nowy_klucz:
+                                    duplikat = True
+                                    break
+                            except: pass
 
-                    if czy_klucz_juz_istnieje:
-                        st.warning("⚠️ Ten klucz jest już zapisany w naszej bazie!")
+                    if duplikat:
+                        st.warning("⚠️ Ten klucz jest już w bazie!")
                     else:
-                        # C. Zapis nowego klucza (skoro nie jest adminem i nie ma go w bazie)
-                        zaszyfrowany_klucz = fernet.encrypt(nowy_klucz.encode()).decode()
-                        nowy_tekst = obecny_tekst + zaszyfrowany_klucz + "\n"
+                        # Zapisujemy w formacie login:klucz
+                        format_zapisu = f"{nowy_nick}:{nowy_klucz}"
+                        zaszyfrowany = fernet.encrypt(format_zapisu.encode()).decode()
+                        nowy_kontent = obecny_tekst + zaszyfrowany + "\n"
                         
-                        tekst_zakodowany = base64.b64encode(nowy_tekst.encode('utf-8')).decode('utf-8')
-                        dane_do_wyslania = {
-                            "message": "Strona: Dodano nowego subskrybenta",
-                            "content": tekst_zakodowany,
-                            "branch": "main"
+                        payload = {
+                            "message": f"Dodano subskrybenta: {nowy_nick}",
+                            "content": base64.b64encode(nowy_kontent.encode()).decode(),
+                            "sha": sha
                         }
-                        if sha_pliku:
-                            dane_do_wyslania["sha"] = sha_pliku
-                            
-                        odpowiedz_put = requests.put(url_api, headers=naglowki, json=dane_do_wyslania)
-                        
-                        if odpowiedz_put.status_code in [200, 201]:
-                            st.success("🎉 Super! Twój klucz został zaszyfrowany i dopisany do listy powiadomień.")
-                        else:
-                            st.error(f"❌ Błąd zapisu: {odpowiedz_put.json().get('message')}")
+                        res_put = requests.put(url, headers=headers, json=payload)
+                        if res_put.status_code in [200, 201]:
+                            st.success(f"🎉 Gotowe {nowy_nick}! Zostałeś dopisany do bazy.")
+            except Exception as e: st.error(f"Błąd: {e}")
+        else: st.warning("Uzupełnij poprawnie oba pola!")
+
+# --- TAB 2: USUWANIE ---
+with tab2:
+    st.subheader("Usuń swoją subskrypcję")
+    st.write("Wpisz dane, które podałeś przy rejestracji, aby się wypisać.")
+    with st.form("form_usun", clear_on_submit=True):
+        usun_nick = st.text_input("Twój Nick:")
+        usun_klucz = st.text_input("Twój Klucz Pushover:", type="password")
+        submit_usun = st.form_submit_button("Usuń mnie z bazy", type="secondary")
+
+    if submit_usun:
+        try:
+            klucz_szyfrujacy = st.secrets["ENCRYPTION_KEY"]
+            fernet = Fernet(klucz_szyfrujacy)
+            github_token = st.secrets["GITHUB_TOKEN"]
+            repo = "Majbor1/orlen_scraper"
+            path = "data/subskrybenci.txt"
+            url = f"https://api.github.com/repos/{repo}/contents/{path}"
+            headers = {"Authorization": f"token {github_token}"}
+
+            res_get = requests.get(url, headers=headers)
+            if res_get.status_code == 200:
+                data = res_get.json()
+                sha = data['sha']
+                linie = base64.b64decode(data['content']).decode('utf-8').splitlines()
                 
-            except KeyError as e:
-                st.error(f"❌ Błąd konfiguracji: Brak klucza {e} w ustawieniach (Secrets)!")
-            except Exception as e:
-                st.error(f"❌ Wystąpił błąd: {e}")
-        else:
-            st.error("❌ Klucz jest za krótki. Sprawdź go ponownie.")
+                nowe_linie = []
+                znaleziono = False
+                szukana_para = f"{usun_nick}:{usun_klucz}"
+
+                for linia in linie:
+                    try:
+                        dec = fernet.decrypt(linia.encode()).decode()
+                        if dec == szukana_para:
+                            znaleziono = True # Tę linię pomijamy (usuwamy)
+                        else:
+                            nowe_linie.append(linia)
+                    except: nowe_linie.append(linia)
+
+                if znaleziono:
+                    nowy_kontent = "\n".join(nowe_linie) + "\n" if nowe_linie else ""
+                    payload = {
+                        "message": f"Usunięto subskrybenta: {usun_nick}",
+                        "content": base64.b64encode(nowy_kontent.encode()).decode(),
+                        "sha": sha
+                    }
+                    requests.put(url, headers=headers, json=payload)
+                    st.success(f"✅ Subskrypcja dla '{usun_nick}' została usunięta.")
+                else:
+                    st.error("❌ Nie znaleziono takiej pary Nick:Klucz w bazie.")
+        except Exception as e: st.error(f"Błąd: {e}")
 
 # ==========================================
 # 8. MAGICZNA LOGIKA ŁADOWANIA ORAZ PANELE Z DECYZJAMI W STYLU POWIADOMIEŃ

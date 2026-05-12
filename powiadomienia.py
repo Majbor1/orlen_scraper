@@ -101,7 +101,7 @@ def wyslij_push():
     # ==========================================
     KOSZTY_OPERACYJNE_NETTO = 0.40  
     MARZA_NETTO = 0.20              
-    URL_STRONY = "https://orlen-ai.streamlit.app"  # <--- TWÓJ NOWY LINK
+    URL_STRONY = "https://orlen-ai.streamlit.app"  # <--- Pamiętaj o podmianie na swój docelowy URL
     # ==========================================
 
     for paliwo, dane in wyniki_ai.items():
@@ -137,7 +137,7 @@ def wyslij_push():
         tekst_limit_dzis = f"{limit_dzis:.2f} zł/l" if limit_dzis else "Brak"
         tekst_limit_jutro = f"{limit_jutro:.2f} zł/l" if limit_jutro else "Brak"
 
-        # BUDOWA HTML (Zamiast \n dajemy <br>, zamiast kresek <hr>)
+        # BUDOWA HTML
         wiadomosc_html += f"<h3>⛽ {paliwo.upper()}</h3>"
         wiadomosc_html += f"DECYZJA: {decyzja}<br><br>"
         
@@ -152,14 +152,14 @@ def wyslij_push():
         wiadomosc_html += f"<b>Cena detaliczna (VAT {int(pobrany_vat)}%):</b><br>"
         wiadomosc_html += f"• Dziś: {detal_dzis:.2f} zł/l<br>"
         wiadomosc_html += f"• Jutro: {detal_jutro:.2f} zł/l<br>"
-        wiadomosc_html += "<hr>" # Cienka pozioma linia rozdzielająca paliwa
+        wiadomosc_html += "<hr>"
 
     # ==========================================
     # WYSYŁKA DO SUBSKRYBENTÓW
     # ==========================================
     lista_odbiorcow = [USER_KEY] if USER_KEY else []
     
-    # Doczytywanie dodatkowych kluczy (jeśli mamy klucz szyfrujący)
+    # Doczytywanie dodatkowych kluczy
     if ENCRYPTION_KEY and os.path.exists(sciezka_sub):
         fernet = Fernet(ENCRYPTION_KEY)
         with open(sciezka_sub, 'r', encoding='utf-8') as plik:
@@ -167,9 +167,15 @@ def wyslij_push():
                 zaszyfrowany = linia.strip()
                 if zaszyfrowany:
                     try:
-                        odszyfrowany = fernet.decrypt(zaszyfrowany.encode()).decode()
-                        if odszyfrowany not in lista_odbiorcow:
-                            lista_odbiorcow.append(odszyfrowany)
+                        odszyfrowany_pelny = fernet.decrypt(zaszyfrowany.encode()).decode()
+                        # Obsługa formatu login:klucz
+                        if ":" in odszyfrowany_pelny:
+                            klucz_finalny = odszyfrowany_pelny.split(":")[1]
+                        else:
+                            klucz_finalny = odszyfrowany_pelny 
+                            
+                        if klucz_finalny not in lista_odbiorcow:
+                            lista_odbiorcow.append(klucz_finalny)
                     except:
                         continue
 
@@ -181,9 +187,9 @@ def wyslij_push():
             "user": key,
             "title": f"📊 {rekomendacja_ogolna} | {dzis_str}",
             "message": wiadomosc_html,
-            "html": 1,
+            "html": 1, 
             "url": URL_STRONY, 
-            "url_title": "Wykresy i szczegóły analitycze",
+            "url_title": "Otwórz Pełny Dashboard",
             "priority": 1 if "Tankuj" in rekomendacja_ogolna else 0
         }
         
