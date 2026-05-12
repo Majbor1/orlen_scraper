@@ -229,7 +229,7 @@ tab1, tab2 = st.tabs(["🔔 Zapisz się", "❌ Usuń subskrypcję"])
 with tab1:
     st.subheader("Zapisz się na powiadomienia")
     with st.form("form_zapis", clear_on_submit=True):
-        nowy_nick = st.text_input("Twój Nick / Login (np. Marcin):")
+        nowy_nick = st.text_input("Login:")
         nowy_klucz = st.text_input("Klucz Pushover User Key:", type="password")
         submit_zapis = st.form_submit_button("Zaszyfruj i zapisz mnie!")
 
@@ -242,7 +242,7 @@ with tab1:
                 
                 # Sprawdzenie czy to nie Admin
                 if nowy_klucz == admin_key:
-                    st.info("💡 Jesteś administratorem, nie musisz się zapisywać!")
+                    st.info("Jesteś już zapisany!")
                 else:
                     github_token = st.secrets["GITHUB_TOKEN"]
                     repo = "Majbor1/orlen_scraper"
@@ -269,7 +269,7 @@ with tab1:
                             except: pass
 
                     if duplikat:
-                        st.warning("⚠️ Ten klucz jest już w bazie!")
+                        st.warning("Ten klucz jest już w bazie!")
                     else:
                         # Zapisujemy w formacie login:klucz
                         format_zapisu = f"{nowy_nick}:{nowy_klucz}"
