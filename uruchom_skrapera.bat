@@ -3,10 +3,8 @@ echo =========================================
 echo  URUCHAMIAM SYSTEM PREDYKCYJNY ORLEN
 echo =========================================
 
-:: Bezpieczne i wymuszone wejscie do folderu
 cd /d "%USERPROFILE%\OneDrive - uek.krakow.pl\orlen_scraper"
 
-:: Automatyczne wykrywanie wlasciwego srodowiska
 if exist ".venv_pc\Scripts\activate.bat" (
     echo [System] Wykryto PC - ladowanie .venv_pc...
     call .venv_pc\Scripts\activate.bat
@@ -63,7 +61,7 @@ echo =========================================
 echo  ZAKONCZONO POMYSLNIE! 
 echo =========================================
 
-:: Wychodzimy ze srodowiska
+
 call deactivate
 
 pause

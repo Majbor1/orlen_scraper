@@ -38,7 +38,6 @@ df_do_oceny = df_nowe[~df_nowe['link'].isin(ocenione_linki)].copy()
 
 if len(df_do_oceny) == 0:
     print("✅ Baza AI jest aktualna!")
-    # Upewniamy się, że nawet jeśli nic nie dodaliśmy, plik pozostaje posortowany po dacie
     if not df_historia.empty and 'data' in df_historia.columns:
         df_historia['data'] = pd.to_datetime(df_historia['data'], errors='coerce')
         df_historia = df_historia.sort_values(by='data', ascending=False)
@@ -46,7 +45,6 @@ if len(df_do_oceny) == 0:
         df_historia.to_csv(plik_ocenione, index=False, encoding='utf-8-sig')
     exit()
 
-# Dzielimy artykuły na paczki po 3 sztuki, żeby oszczędzać zapytania API
 rozmiar_paczki = 3
 paczki = [df_do_oceny.iloc[i:i + rozmiar_paczki] for i in range(0, len(df_do_oceny), rozmiar_paczki)]
 
@@ -70,7 +68,7 @@ for paczka in paczki:
     
     try:
         response = client.models.generate_content(
-            model='gemini-2.5-flash', # Zwykły flash lepiej radzi sobie z formatowaniem JSON
+            model='gemini-2.5-flash', 
             contents=zapytanie,
         )
         
@@ -80,7 +78,6 @@ for paczka in paczki:
         for idx, (_, row) in enumerate(paczka.iterrows()):
             nowy_wiersz = row.copy()
             
-            # Bezpieczne przypisanie - na wypadek, gdyby Gemini zwróciło mniej elementów niż o to prosiliśmy
             if idx < len(wyniki_json):
                 nowy_wiersz['panika_ai'] = wyniki_json[idx].get('panika', 0)
                 nowy_wiersz['sukces_ai'] = wyniki_json[idx].get('sukces', 0)
@@ -92,21 +89,13 @@ for paczka in paczki:
             
             df_historia = pd.concat([df_historia, pd.DataFrame([nowy_wiersz])], ignore_index=True)
             
-        # ==========================================
-        # SORTOWANIE PO DACIE PRZED ZAPISEM
-        # ==========================================
-        # 1. Konwersja na typ daty (obsługa błędnych dat)
         df_historia['data'] = pd.to_datetime(df_historia['data'], errors='coerce')
-        # 2. Sortowanie: najnowsze na górze
         df_historia = df_historia.sort_values(by='data', ascending=False)
-        # 3. Powrót do ładnego formatu tekstowego RRRR-MM-DD
         df_historia['data'] = df_historia['data'].dt.strftime('%Y-%m-%d')
-        # 4. Zresetowanie starych numerów wierszy po sortowaniu
         df_historia = df_historia.reset_index(drop=True)
-        # ==========================================
         
         df_historia.to_csv(plik_ocenione, index=False, encoding='utf-8-sig')
-        time.sleep(4) # Krótszy czas oczekiwania, bo wysyłamy rzadziej (paczki)
+        time.sleep(4) 
         
     except Exception as e:
         print(f"⚠️ Błąd przy paczce (Pominięto, sprawdź logi): {e}")

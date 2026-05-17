@@ -5,9 +5,8 @@ from datetime import datetime, timedelta
 
 def pobierz_dane_gieldowe():
     nazwa_pliku = 'data/dane_gieldowe.csv'
-    print("📈 Aktualizacja giełdy z zasadą ciągłości (Forward Fill)...")
+    print("Aktualizacja giełdy z zasadą ciągłości")
 
-    # 1. Pobieramy dane (ostatnie 14 dni, żeby mieć pewność ciągłości)
     koniec = datetime.now()
     start = koniec - timedelta(days=7)
     
@@ -21,12 +20,9 @@ def pobierz_dane_gieldowe():
         })
         nowe_dane.index = pd.to_datetime(nowe_dane.index)
         
-        # --- MAGIA: Wypełnianie dziur (Weekendy) ---
-        # Tworzymy pełny zakres dat (codziennie)
         pelny_zakres = pd.date_range(start=nowe_dane.index.min(), end=nowe_dane.index.max(), freq='D')
         nowe_dane = nowe_dane.reindex(pelny_zakres)
         
-        # Uzupełniamy braki wartością z poprzedniego dnia
         nowe_dane = nowe_dane.ffill()
         
         nowe_dane = nowe_dane.reset_index().rename(columns={'index': 'data'})
@@ -36,14 +32,12 @@ def pobierz_dane_gieldowe():
         print(f"❌ Błąd: {e}")
         return
 
-    # 2. Łączymy z historią
     if os.path.exists(nazwa_pliku):
         stara_baza = pd.read_csv(nazwa_pliku)
         df_final = pd.concat([nowe_dane, stara_baza]).drop_duplicates(subset=['data'], keep='first')
     else:
         df_final = nowe_dane
 
-    # Sortujemy: najnowsze na górze
     df_final = df_final.sort_values('data', ascending=False)
     df_final.to_csv(nazwa_pliku, index=False)
     print(f"✅ Giełda zaktualizowana (brakujące dni uzupełnione).")

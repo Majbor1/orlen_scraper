@@ -4,13 +4,8 @@ import numpy as np
 
 def uruchom_kalkulator(marza_pb95=0.15, marza_on=0.15):
     print("🧮 Uruchamiam Profesjonalny Kalkulator Detaliczny...")
-    
-    # =========================================================================
-    # ⚙️ UKRYTE ZMIENNE RYNKOWE (Te, których nam brakowało)
-    # Suma: Opłata zapasowa (0.10) + Emisyjna (0.08) + Premia lądowa/Logistyka (0.22)
-    # Razem ok. 0.40 PLN netto ląduje w cenie zanim doliczymy VAT i marżę stacji.
     KOSZTY_OPERACYJNE_NETTO = 0.40 
-    # =========================================================================
+
 
     plik_hurt = 'data/orlen_master_table.csv' 
     plik_max = 'data/cena_max.csv'
@@ -23,7 +18,6 @@ def uruchom_kalkulator(marza_pb95=0.15, marza_on=0.15):
     df = pd.read_csv(plik_hurt)
     df['data'] = pd.to_datetime(df['data'])
 
-    # Wczytujemy ceny z Monitora
     df_max = None
     if os.path.exists(plik_max):
         df_max = pd.read_csv(plik_max)
@@ -47,14 +41,7 @@ def uruchom_kalkulator(marza_pb95=0.15, marza_on=0.15):
     df['marza_stacji'] = df['paliwo'].apply(przypisz_marze)
     df['minister_max'] = df.apply(wyciagnij_cene_max, axis=1)
 
-    # Ustawiamy VAT na podstawie obecności ceny maksymalnej (Tarcza 8% vs 23%)
     df['stawka_vat'] = np.where(df['minister_max'].notna(), 1.08, 1.23)
-    
-    # --- NOWY, PANCERNY WZÓR ---
-    # 1. Bierzemy cenę hurtową (m3 -> l)
-    # 2. Dodajemy ukryte koszty operacyjne (Zapasy + Emisja + Logistyka)
-    # 3. Całość (Hurt + Koszty + Marża) mnożymy przez VAT
-    # To jest najczęstszy sposób księgowania na stacjach.
     
     df['pylon'] = (((df['cena_dzis'] / 1000) + KOSZTY_OPERACYJNE_NETTO + (df['marza_stacji']/1.23)) * df['stawka_vat'])
     df['pylon'] = df['pylon'].round(2)

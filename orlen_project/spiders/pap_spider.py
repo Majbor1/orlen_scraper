@@ -21,7 +21,7 @@ class PapSpider(scrapy.Spider):
                 df_zrodlo = df[df['zrodlo'] == 'PAP']
                 if not df_zrodlo.empty and 'data' in df_zrodlo.columns:
                     ostatnia_data = pd.to_datetime(df_zrodlo['data']).max()
-                    self.logger.info(f"📅 Ostatnia data w bazie (PAP): {ostatnia_data.strftime('%Y-%m-%d')}")
+                    self.logger.info(f"Ostatnia data w bazie (PAP): {ostatnia_data.strftime('%Y-%m-%d')}")
                     return ostatnia_data.strftime('%Y-%m-%d')
             except Exception as e:
                 self.logger.warning(f"Błąd odczytu CSV: {e}")

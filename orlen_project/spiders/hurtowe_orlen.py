@@ -75,11 +75,9 @@ class HurtoweOrlenSpider(scrapy.Spider):
         else:
             df_all = df_nowe
 
-        # Czyszczenie i usuwanie duplikatów
         df_all['data'] = pd.to_datetime(df_all['data'])
         df_all = df_all.drop_duplicates(subset=['data', 'paliwo'], keep='last')
 
-        # Wypełnianie brakujących dni (ffill)
         df_final_lista = []
         data_koniec = pd.Timestamp(datetime.now().date())
         
@@ -93,4 +91,4 @@ class HurtoweOrlenSpider(scrapy.Spider):
         df_final = pd.concat(df_final_lista).sort_values('data', ascending=False)
         df_final['data'] = df_final['data'].dt.strftime('%Y-%m-%d')
         df_final.to_csv(self.plik_wynikowy, index=False)
-        self.logger.info(f"✅ Baza paliw zaktualizowana i zapisana!")
+        self.logger.info(f"Baza paliw zaktualizowana i zapisana!")

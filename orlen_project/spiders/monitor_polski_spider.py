@@ -17,7 +17,6 @@ class CenaMaxMpSpider(scrapy.Spider):
         super(CenaMaxMpSpider, self).__init__(*args, **kwargs)
         self.zapisane_daty = set()
         
-        # 1. OPTYMALIZACJA: Wczytujemy historię tylko RAZ przy starcie skryptu
         if os.path.isfile(self.plik_csv):
             try:
                 with open(self.plik_csv, 'r', encoding='utf-8') as f:
@@ -25,7 +24,7 @@ class CenaMaxMpSpider(scrapy.Spider):
                     for row in reader:
                         if row and row[0] != 'data':
                             self.zapisane_daty.add(row[0])
-                self.logger.info(f"📅 Startuję. W pamięci mam już {len(self.zapisane_daty)} zarchiwizowanych dat.")
+                self.logger.info(f"Startuję. W pamięci mam już {len(self.zapisane_daty)} zarchiwizowanych dat.")
             except Exception as e:
                 self.logger.error(f"Błąd odczytu pliku z historią: {e}")
 
@@ -46,21 +45,21 @@ class CenaMaxMpSpider(scrapy.Spider):
 
     async def parse_lista(self, response):
         page = response.meta["playwright_page"]
-        self.logger.info("🕵️‍♂️ Skanuję tabelę w poszukiwaniu dokumentów...")
+        self.logger.info("Skanuję tabelę w poszukiwaniu dokumentów...")
         
         xpath_pdf = "//tr[td[a[contains(text(), 'maksymalnej ceny paliw')]]]//a[img[contains(@src, 'file_pdf')]]/@href"
         linki_pdf = response.xpath(xpath_pdf).getall()
         await page.close()
 
         if linki_pdf:
-            self.logger.info(f"🔗 Znalazłem {len(linki_pdf)} linków. Zaczynam sprawdzanie...")
+            self.logger.info(f"Znalazłem {len(linki_pdf)} linków. Zaczynam sprawdzanie...")
             
             # Wymuszamy kolejność! Priority sprawia, że pobierze najpierw dokument z samej góry
             for idx, link in enumerate(linki_pdf):
                 pelny_link = response.urljoin(link)
                 yield scrapy.Request(pelny_link, callback=self.parse_pdf, priority=100-idx)
         else:
-            self.logger.error("❌ Brak wyników na stronie.")
+            self.logger.error("Brak wyników na stronie.")
 
     def parse_pdf(self, response):
         if b"%PDF" not in response.body[:5]: return
@@ -100,11 +99,8 @@ class CenaMaxMpSpider(scrapy.Spider):
 
         data_wejscia = (data_obwieszczenia + timedelta(days=1)).strftime("%Y-%m-%d")
 
-        # =========================================================================
-        # 2. HAMULEC AWARYJNY: Jeśli data jest w bazie, zatrzymujemy CAŁEGO pająka!
-        # =========================================================================
         if data_wejscia in self.zapisane_daty:
-            self.logger.info(f"🛑 Znalazłem zarchiwizowaną datę ({data_wejscia}). PRZERYWAM pobieranie starszych plików!")
+            self.logger.info(f"Znalazłem zarchiwizowaną datę ({data_wejscia}). PRZERYWAM pobieranie starszych plików!")
             raise CloseSpider(reason='Baza aktualna')
 
         plik_jest_pusty = not os.path.isfile(self.plik_csv) or os.path.getsize(self.plik_csv) == 0
@@ -115,11 +111,9 @@ class CenaMaxMpSpider(scrapy.Spider):
             writer.writerow([data_wejscia, cena_95, cena_98, cena_on])
 
         self.zapisane_daty.add(data_wejscia)
-        self.logger.info(f"✅ ZAPISANO NOWĄ CENĘ MAX: {data_wejscia}")
+        self.logger.info(f"ZAPISANO NOWĄ CENĘ MAX: {data_wejscia}")
 
     def closed(self, reason):
-        # Funkcja naprawcza uruchomi się niezależnie od tego, czy skończymy normalnie, 
-        # czy wywołamy wyżej nasz "Hamulec awaryjny".
         self.logger.info(f"🛠️ Pająk zakończył pracę (Powód: {reason}). Odpalam moduł kalendarza...")
         
         if not os.path.exists(self.plik_csv):
@@ -141,8 +135,8 @@ class CenaMaxMpSpider(scrapy.Spider):
             df['data'] = df['data'].dt.strftime('%Y-%m-%d')
             df.to_csv(self.plik_csv, index=False)
 
-            self.logger.info(f"✅ KALENDARZ NAPRAWIONY! Baza ma {len(df)} dni ciągłej historii.")
+            self.logger.info(f"KALENDARZ NAPRAWIONY! Baza ma {len(df)} dni ciągłej historii.")
         except Exception as e:
-            self.logger.error(f"❌ Wystąpił błąd podczas naprawy pliku CSV: {e}")
+            self.logger.error(f"Wystąpił błąd podczas naprawy pliku CSV: {e}")
         finally:
             os._exit(0)

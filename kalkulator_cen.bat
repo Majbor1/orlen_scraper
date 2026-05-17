@@ -3,10 +3,8 @@ echo =========================================
 echo  URUCHAMIAM kalkulator detaliczny CEN
 echo =========================================
 
-:: Bezpieczne i wymuszone wejscie do folderu
 cd /d "%USERPROFILE%\OneDrive - uek.krakow.pl\orlen_scraper"
 
-:: Automatyczne wykrywanie wlasciwego srodowiska
 if exist ".venv_pc\Scripts\activate.bat" (
     echo [System] Wykryto PC - ladowanie .venv_pc...
     call .venv_pc\Scripts\activate.bat

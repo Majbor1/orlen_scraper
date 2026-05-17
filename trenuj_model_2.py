@@ -1,7 +1,7 @@
 import pandas as pd
 import numpy as np
 import matplotlib
-matplotlib.use('Qt5Agg') # Używamy profesjonalnego okienka Qt5
+matplotlib.use('Qt5Agg') 
 #matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from sklearn.ensemble import RandomForestRegressor
@@ -11,9 +11,6 @@ from datetime import datetime, timedelta
 import os
 import json
 
-# =======================================================
-# 1. FUNKCJA ZAPISUJĄCA WYNIKI DO JSON
-# =======================================================
 def zapisz_szczegoly_do_json(wyniki_slownik):
     plik_json = 'data/historia_treningow.json'
     
@@ -37,9 +34,6 @@ def zapisz_szczegoly_do_json(wyniki_slownik):
         
     print(f"💾 Zapisano historię błędów, wagi cech i PROGNOZY do pliku: {plik_json}")
 
-# =======================================================
-# 2. GŁÓWNY PROCES TRENINGU MODELU (Z WALIDACJĄ CZASOWĄ)
-# =======================================================
 print("🧠 Trenuję modele z użyciem CECH OPÓŹNIONYCH oraz TimeSeriesSplit...\n")
 
 try:
@@ -51,9 +45,6 @@ except FileNotFoundError:
 df['data'] = pd.to_datetime(df['data'])
 df = df.sort_values('data', ascending=True).reset_index(drop=True)
 
-# -------------------------------------------------------
-# Cechy opóźnione (historia cen wstecz - Lag Features)
-# -------------------------------------------------------
 df['cena_wczoraj'] = df.groupby('paliwo')['cena_dzis'].shift(1)
 df['cena_3_dni_temu'] = df.groupby('paliwo')['cena_dzis'].shift(3)
 
@@ -95,13 +86,13 @@ for i, paliwo in enumerate(paliwa, 1):
         bledy_z_krokow.append(blad)
         
     blad_sredni_tscv = np.mean(bledy_z_krokow)
-    print(f"⛽ {paliwo}: Średni błąd MAE = {blad_sredni_tscv:.2f} PLN/m3")
+    print(f"{paliwo}: Średni błąd MAE = {blad_sredni_tscv:.2f} PLN/m3")
     
     model.fit(X, y)
     
     data_jutro = ostatnia_data + timedelta(days=1)
     prognoza_na_jutro = model.predict(ostatni_wiersz_cechy)[0]
-    print(f"   🔮 PROGNOZA NA JUTRO ({data_jutro.strftime('%Y-%m-%d')}): {prognoza_na_jutro:.2f} PLN/m3")
+    print(f"PROGNOZA NA JUTRO ({data_jutro.strftime('%Y-%m-%d')}): {prognoza_na_jutro:.2f} PLN/m3")
     
     waznosc = model.feature_importances_
     wplyw_slownik = {}
@@ -115,9 +106,6 @@ for i, paliwo in enumerate(paliwa, 1):
         "wplyw_cech": wplyw_slownik
     }
     
-    # =======================================================
-    # RYSOWANIE WYKRESU
-    # =======================================================
     plt.subplot(len(paliwa), 1, i)
     
     limit_dni = -60
@@ -135,9 +123,7 @@ for i, paliwo in enumerate(paliwa, 1):
     plt.legend()
     plt.grid(True, alpha=0.3)
     
-    # -------------------------------------------------------
-    # KONFIGURACJA OSI X: Dzisiaj, Jutro i co tydzień wstecz
-    # -------------------------------------------------------
+
     daty_etykiety = [data_jutro, ostatnia_data]
     
     najstarsza_data_na_wykresie = daty_historyczne.iloc[limit_dni]
@@ -157,12 +143,9 @@ for i, paliwo in enumerate(paliwa, 1):
         fontsize=9
     )
 
-# -------------------------------------------------------
-# DODANY MARGINES MIĘDZY WYKRESAMI (h_pad)
-# -------------------------------------------------------
 plt.tight_layout(h_pad=4.0)
 
-# Zapisanie JSON i Wykresów
+
 zapisz_szczegoly_do_json(aktualne_wyniki_modelu)
 dzis = datetime.now().strftime("%Y-%m-%d")
 nazwa_wykresu = f'wykres_z_dnia_{dzis}.png'
@@ -170,5 +153,5 @@ output_dir = 'data/wykresy'
 os.makedirs(output_dir, exist_ok=True)
 plt.savefig(os.path.join(output_dir, f'{nazwa_wykresu}'), dpi=300)
 
-print(f"\n📈 ZAPISANO WYKRESY: Otwórz '{nazwa_wykresu}' i zobacz trend!")
+print(f"\n ZAPISANO WYKRESY: Otwórz '{nazwa_wykresu}' i zobacz trend!")
 plt.show()

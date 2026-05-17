@@ -11,9 +11,6 @@ from datetime import datetime, timedelta
 import os
 import json
 
-# =======================================================
-# 1. FUNKCJA ZAPISUJĄCA WYNIKI DO JSON
-# =======================================================
 def zapisz_szczegoly_do_json(wyniki_slownik):
     plik_json = 'data/historia_treningow.json'
     
@@ -28,32 +25,27 @@ def zapisz_szczegoly_do_json(wyniki_slownik):
             with open(plik_json, 'r', encoding='utf-8') as f:
                 historia = json.load(f)
         except Exception as e:
-            print(f"⚠️ Uwaga: Błąd odczytu {plik_json} ({e}). Tworzę nowy plik.")
+            print(f"Uwaga: Błąd odczytu {plik_json} ({e}). Tworzę nowy plik.")
             
     historia.insert(0, nowy_wpis) 
     
     with open(plik_json, 'w', encoding='utf-8') as f:
         json.dump(historia, f, indent=4, ensure_ascii=False)
         
-    print(f"💾 Zapisano historię błędów, wagi cech i PROGNOZY do pliku: {plik_json}")
+    print(f"Zapisano historię błędów, wagi cech i PROGNOZY do pliku: {plik_json}")
 
-# =======================================================
-# 2. GŁÓWNY PROCES TRENINGU MODELU (Z WALIDACJĄ CZASOWĄ)
-# =======================================================
-print("🧠 Trenuję modele z użyciem CECH OPÓŹNIONYCH oraz TimeSeriesSplit...\n")
+
+print("Trenuję modele z użyciem CECH OPÓŹNIONYCH oraz TimeSeriesSplit...\n")
 
 try:
     df = pd.read_csv('data/orlen_master_table.csv')
 except FileNotFoundError:
-    print("❌ Nie znaleziono pliku! Upewnij się, że Tabela Mistrzowska jest w folderze 'data'.")
+    print("Nie znaleziono pliku!")
     exit()
 
 df['data'] = pd.to_datetime(df['data'])
 df = df.sort_values('data', ascending=True).reset_index(drop=True)
 
-# -------------------------------------------------------
-# Cechy opóźnione (historia cen wstecz - Lag Features)
-# -------------------------------------------------------
 df['cena_wczoraj'] = df.groupby('paliwo')['cena_dzis'].shift(1)
 df['cena_3_dni_temu'] = df.groupby('paliwo')['cena_dzis'].shift(3)
 
@@ -101,7 +93,7 @@ for i, paliwo in enumerate(paliwa, 1):
     
     data_jutro = ostatnia_data + timedelta(days=1)
     prognoza_na_jutro = model.predict(ostatni_wiersz_cechy)[0]
-    print(f"   🔮 PROGNOZA NA JUTRO ({data_jutro.strftime('%Y-%m-%d')}): {prognoza_na_jutro:.2f} PLN/m3")
+    print(f"PROGNOZA NA JUTRO ({data_jutro.strftime('%Y-%m-%d')}): {prognoza_na_jutro:.2f} PLN/m3")
     
     waznosc = model.feature_importances_
     wplyw_slownik = {}
@@ -115,9 +107,6 @@ for i, paliwo in enumerate(paliwa, 1):
         "wplyw_cech": wplyw_slownik
     }
     
-    # =======================================================
-    # RYSOWANIE WYKRESU
-    # =======================================================
     plt.subplot(len(paliwa), 1, i)
     
     limit_dni = -60
@@ -135,9 +124,6 @@ for i, paliwo in enumerate(paliwa, 1):
     plt.legend()
     plt.grid(True, alpha=0.3)
     
-    # -------------------------------------------------------
-    # KONFIGURACJA OSI X: Dzisiaj, Jutro i co tydzień wstecz
-    # -------------------------------------------------------
     daty_etykiety = [data_jutro, ostatnia_data]
     
     najstarsza_data_na_wykresie = daty_historyczne.iloc[limit_dni]
@@ -157,12 +143,8 @@ for i, paliwo in enumerate(paliwa, 1):
         fontsize=9
     )
 
-# -------------------------------------------------------
-# DODANY MARGINES MIĘDZY WYKRESAMI (h_pad)
-# -------------------------------------------------------
 plt.tight_layout(h_pad=4.0)
 
-# Zapisanie JSON i Wykresów
 zapisz_szczegoly_do_json(aktualne_wyniki_modelu)
 dzis = datetime.now().strftime("%Y-%m-%d")
 nazwa_wykresu = f'wykres_z_dnia_{dzis}.png'

@@ -7,29 +7,20 @@ import os
 import requests
 import time
 import math
-import requests
 import base64
 from datetime import datetime, timedelta
 from cryptography.fernet import Fernet
 
-# ==========================================
-# 1. KONFIGURACJA STRONY I PAMIĘCI SESJI
-# ==========================================
 st.set_page_config(page_title="Orlen AI Dashboard", page_icon="⛽", layout="wide")
-st.title("⛽ Orlen AI - Interaktywny Panel Analityczny")
+st.title("Moniotr cen paliw")
 st.markdown("Monitoruj szacowane ceny na stacjach, prognozy AI i limity rządowe.")
 
-# Pamięć sesji dla animacji
 if 'trwa_aktualizacja' not in st.session_state:
     st.session_state.trwa_aktualizacja = False
 
-# Pamięć sesji dla czasu kliknięcia (Rozwiązanie naszego problemu)
 if 'ostatnie_klikniecie' not in st.session_state:
     st.session_state.ostatnie_klikniecie = None
 
-# ==========================================
-# 2. FUNKCJE WCZYTUJĄCE DANE
-# ==========================================
 @st.cache_data
 def load_data():
     df_master = pd.DataFrame()
@@ -76,17 +67,11 @@ df_max = load_max_prices()
 predykcje = load_predictions()
 df_news = load_news()
 
-# ==========================================
-# 3. ZAAWANSOWANA BLOKADA AKTUALIZACJI (JSON + SESJA)
-# ==========================================
 mozna_aktualizowac = True
 komunikat_blokady = ""
 data_treningu_wyswietlana = "Brak daty"
-
-# Zakładamy domyślnie, że od aktualizacji minęło mnóstwo czasu
 sekundy_od_aktualizacji = 999999
 
-# A. Odczytujemy czas z pliku JSON z modelu AI
 if predykcje and 'data_treningu' in predykcje:
     try:
         czas_oryginalny = pd.to_datetime(predykcje['data_treningu'])
@@ -101,36 +86,30 @@ if predykcje and 'data_treningu' in predykcje:
         
         if sekundy_od_jsona >= 0:
             sekundy_od_aktualizacji = sekundy_od_jsona
-    except Exception as e:
+    except Exception:
         data_treningu_wyswietlana = predykcje.get('data_treningu', 'Brak daty')
 
-# B. Odczytujemy czas kliknięcia przycisku (jeśli strona nie zdążyła pobrać nowego pliku)
 if st.session_state.ostatnie_klikniecie is not None:
     sekundy_od_kliku = (datetime.now() - st.session_state.ostatnie_klikniecie).total_seconds()
-    # Jeśli kliknięto przycisk niedawno (np. 120 sek temu), nadpisujemy stary czas z JSONa
     if 0 <= sekundy_od_kliku < sekundy_od_aktualizacji:
         sekundy_od_aktualizacji = sekundy_od_kliku
 
-# C. Ostateczna decyzja o zablokowaniu przycisku
 if sekundy_od_aktualizacji < 600:
     mozna_aktualizowac = False
     minuty_do_konca = math.ceil((600 - sekundy_od_aktualizacji) / 60)
     komunikat_blokady = f"Następna aktualizacja możliwa za {minuty_do_konca} minut."
 
-# ==========================================
-# 4. KARTY Z PODSUMOWANIEM I PRZYCISK AKTUALIZACJI
-# ==========================================
 col_tytul, col_przycisk = st.columns([3, 1])
 
 with col_tytul:
-    st.subheader("🔮 Szacowane Ceny Detaliczne na JUTRO")
+    st.subheader("Szacowane Ceny Detaliczne na JUTRO")
     if predykcje:
         st.caption(f"Ostatnia aktualizacja modelu: {data_treningu_wyswietlana}")
 
 with col_przycisk:
     st.markdown("<br>", unsafe_allow_html=True) 
     
-    if st.button("🔄 Wymuś aktualizację bazy", type="primary", use_container_width=True, disabled=not mozna_aktualizowac or st.session_state.trwa_aktualizacja):
+    if st.button("Wymuś aktualizację bazy", type="primary", use_container_width=True, disabled=not mozna_aktualizowac or st.session_state.trwa_aktualizacja):
         token = st.secrets.get("GITHUB_TOKEN")
         if not token:
             st.error("Brak GITHUB_TOKEN w ustawieniach Streamlit!")
@@ -144,7 +123,6 @@ with col_przycisk:
             resp = requests.post(url, headers=headers, json=data)
             
             if resp.status_code == 204:
-                # ZAPISUJEMY CZAS KLIKNIĘCIA DO PAMIĘCI
                 st.session_state.ostatnie_klikniecie = datetime.now()
                 st.session_state.trwa_aktualizacja = True
                 st.rerun()            
@@ -155,21 +133,16 @@ with col_przycisk:
         st.caption(komunikat_blokady)
 
 if df.empty or predykcje is None:
-    st.error("❌ Brak danych głównych. Uruchom bota!")
+    st.error("Brak danych głównych. Uruchom bota!")
     st.stop()
 
-# Puste pudełko na układ cen
 pojemnik_na_ceny = st.empty()
 st.divider()
 
-# ==========================================
-# 5. INTERAKTYWNY WYKRES
-# ==========================================
-st.subheader("📈 Analiza Trendu (Ostatnie 60 dni)")
+st.subheader("Analiza Trendu (Ostatnie 60 dni)")
 
 wybrane_paliwo = st.selectbox("Wybierz paliwo do wyświetlenia na wykresie:", df['paliwo'].unique())
 wyniki = predykcje['wyniki']
-
 df_wykres = df[df['paliwo'] == wybrane_paliwo].copy().tail(60)
 
 fig = px.line(
@@ -194,11 +167,8 @@ fig.add_trace(go.Scatter(
 
 st.plotly_chart(fig, use_container_width=True)
 
-# ==========================================
-# 6. BAZA ARTYKUŁÓW (WIDOK TABELI)
-# ==========================================
 st.divider()
-st.subheader("📰 Baza Analizowanych Wiadomości")
+st.subheader("Baza Analizowanych Wiadomości")
 st.markdown("Lista artykułów, na podstawie których AI analizowało nastroje rynkowe.")
 
 if not df_news.empty:
@@ -219,13 +189,9 @@ if not df_news.empty:
 else:
     st.info("Brak artykułów w bazie ocen.")
 
-# ==========================================
-# 9. FORMULARZ ZAPISU NA POWIADOMIENIA (GitHub API)
-# ==========================================
 st.divider()
-tab1, tab2 = st.tabs(["🔔 Zapisz się", "❌ Usuń subskrypcję"])
+tab1, tab2 = st.tabs(["Zapisz się", "Usuń subskrypcję"])
 
-# --- TAB 1: ZAPISYWANIE ---
 with tab1:
     st.subheader("Zapisz się na powiadomienia")
     with st.form("form_zapis", clear_on_submit=True):
@@ -237,10 +203,9 @@ with tab1:
         if len(nowy_nick) > 2 and len(nowy_klucz) >= 15:
             try:
                 klucz_szyfrujacy = st.secrets["ENCRYPTION_KEY"]
-                admin_key = st.secrets["USER_KEY"]
+                admin_key = st.secrets.get("USER_KEY", "")
                 fernet = Fernet(klucz_szyfrujacy)
                 
-                # Sprawdzenie czy to nie Admin
                 if nowy_klucz == admin_key:
                     st.info("Jesteś już zapisany!")
                 else:
@@ -271,7 +236,6 @@ with tab1:
                     if duplikat:
                         st.warning("Ten klucz jest już w bazie!")
                     else:
-                        # Zapisujemy w formacie login:klucz
                         format_zapisu = f"{nowy_nick}:{nowy_klucz}"
                         zaszyfrowany = fernet.encrypt(format_zapisu.encode()).decode()
                         nowy_kontent = obecny_tekst + zaszyfrowany + "\n"
@@ -279,18 +243,20 @@ with tab1:
                         payload = {
                             "message": f"Dodano subskrybenta: {nowy_nick}",
                             "content": base64.b64encode(nowy_kontent.encode()).decode(),
-                            "sha": sha
+                            "branch": "main"
                         }
+                        if sha: payload["sha"] = sha
+                            
                         res_put = requests.put(url, headers=headers, json=payload)
                         if res_put.status_code in [200, 201]:
                             st.success(f"🎉 Gotowe {nowy_nick}! Zostałeś dopisany do bazy.")
+                        else:
+                            st.error(f"Błąd GitHuba: {res_put.json().get('message')}")
             except Exception as e: st.error(f"Błąd: {e}")
         else: st.warning("Uzupełnij poprawnie oba pola!")
 
-# --- TAB 2: USUWANIE ---
 with tab2:
     st.subheader("Usuń swoją subskrypcję")
-    st.write("Wpisz dane, które podałeś przy rejestracji, aby się wypisać.")
     with st.form("form_usun", clear_on_submit=True):
         usun_nick = st.text_input("Twój Nick:")
         usun_klucz = st.text_input("Twój Klucz Pushover:", type="password")
@@ -317,10 +283,11 @@ with tab2:
                 szukana_para = f"{usun_nick}:{usun_klucz}"
 
                 for linia in linie:
+                    if not linia.strip(): continue
                     try:
                         dec = fernet.decrypt(linia.encode()).decode()
                         if dec == szukana_para:
-                            znaleziono = True # Tę linię pomijamy (usuwamy)
+                            znaleziono = True
                         else:
                             nowe_linie.append(linia)
                     except: nowe_linie.append(linia)
@@ -330,24 +297,24 @@ with tab2:
                     payload = {
                         "message": f"Usunięto subskrybenta: {usun_nick}",
                         "content": base64.b64encode(nowy_kontent.encode()).decode(),
-                        "sha": sha
+                        "sha": sha,
+                        "branch": "main"
                     }
                     requests.put(url, headers=headers, json=payload)
-                    st.success(f"✅ Subskrypcja dla '{usun_nick}' została usunięta.")
+                    st.success(f"Subskrypcja dla '{usun_nick}' została usunięta.")
                 else:
-                    st.error("❌ Nie znaleziono takiej pary Nick:Klucz w bazie.")
+                    st.error("Nie znaleziono takiej pary Nick:Klucz w bazie.")
+            else:
+                st.error("Błąd połączenia z bazą.")
         except Exception as e: st.error(f"Błąd: {e}")
 
-# ==========================================
-# 8. MAGICZNA LOGIKA ŁADOWANIA ORAZ PANELE Z DECYZJAMI W STYLU POWIADOMIEŃ
-# ==========================================
 dzis_str = datetime.now().strftime('%Y-%m-%d')
 jutro_str = (datetime.now() + timedelta(days=1)).strftime('%Y-%m-%d')
 
 if st.session_state.trwa_aktualizacja:
     for i in range(1, 121):
         kropki = ". " * ((i % 3) + 1)
-        pojemnik_na_ceny.info(f"⏳ Pobieranie najnowszych danych z rynku: {i} sek {kropki}")
+        pojemnik_na_ceny.info(f"Pobieranie najnowszych danych z rynku: {i} sek {kropki}")
         time.sleep(1) 
     
     st.session_state.trwa_aktualizacja = False
@@ -361,21 +328,17 @@ else:
         MARZA_NETTO = 0.20
         
         for (paliwo, dane), col in zip(wyniki.items(), kolumny_kpi):
-            # 1. Obliczenia Hurtowe
             ostatni_wiersz = df[df['paliwo'] == paliwo].iloc[-1]
             hurt_dzis_l = ostatni_wiersz['cena_dzis'] / 1000
             hurt_jutro_l = dane['prognoza_na_jutro'] / 1000
             
-            # 2. Pobieranie VAT
             pobrany_vat = ostatni_wiersz.get('vat', 8)
             if pd.isna(pobrany_vat): pobrany_vat = 8
             mnoznik_vat = 1 + (float(pobrany_vat) / 100)
             
-            # 3. Szacowany Detal
             detal_dzis = (hurt_dzis_l + KOSZTY_OPERACYJNE_NETTO + MARZA_NETTO) * mnoznik_vat
             detal_jutro = (hurt_jutro_l + KOSZTY_OPERACYJNE_NETTO + MARZA_NETTO) * mnoznik_vat
             
-            # 4. Sprawdzanie limitów państwowych na dziś i na jutro
             limit_dzis = None
             limit_jutro = None
             
@@ -393,17 +356,14 @@ else:
                     val = row_jutro.iloc[0].get(kolumna_max)
                     if pd.notna(val): limit_jutro = val
             
-            # 5. Ustalenie Ceny Ostatecznej
             cena_ostateczna_dzis = min(detal_dzis, limit_dzis) if limit_dzis else detal_dzis
             cena_ostateczna_jutro = min(detal_jutro, limit_jutro) if limit_jutro else detal_jutro
             
             roznica = cena_ostateczna_jutro - cena_ostateczna_dzis
             
-            # 6. Teksty zastępcze dla braku limitu
             tekst_limit_dzis = f"{limit_dzis:.2f} zł/l" if limit_dzis else "Brak"
             tekst_limit_jutro = f"{limit_jutro:.2f} zł/l" if limit_jutro else "Brak"
             
-            # WYSWIETLANIE W KOLUMNIE
             with col:
                 st.markdown(f"### ⛽ {paliwo.upper()}")
                 
