@@ -20,7 +20,6 @@ class HurtoweOrlenSpider(scrapy.Spider):
         self.zebrane_dane = []
 
     def wyznacz_date_poczatkowa(self):
-        """Sprawdza plik CSV i zwraca ostatnią znaną datę. W razie braku, zwraca -7 dni."""
         if os.path.exists(self.plik_wynikowy):
             try:
                 df = pd.read_csv(self.plik_wynikowy)
@@ -29,15 +28,15 @@ class HurtoweOrlenSpider(scrapy.Spider):
                     self.logger.info(f"📅 Znaleziono bazę! Pobieram dane od: {ostatnia_data.strftime('%Y-%m-%d')}")
                     return ostatnia_data.strftime('%Y-%m-%d')
             except Exception as e:
-                self.logger.error(f"⚠️ Błąd odczytu daty z CSV: {e}. Zastosuję domyślne 7 dni.")
+                self.logger.error(f"Błąd odczytu daty z CSV: {e}.")
         
-        # Domyślnie 7 dni wstecz, jeśli plik nie istnieje lub jest uszkodzony
+        
         siedem_dni_temu = datetime.now() - timedelta(days=7)
         return siedem_dni_temu.strftime('%Y-%m-%d')
 
     def start_requests(self):
         dzisiaj = datetime.now().strftime('%Y-%m-%d')
-        data_od = self.wyznacz_date_poczatkowa() # <--- TUTAJ UŻYWAMY TWOJEGO POMYSŁU
+        data_od = self.wyznacz_date_poczatkowa()
 
         for pid in self.paliwa_id:
             url = f"https://tool.orlen.pl/api/wholesalefuelprices/ByProduct?productId={pid}&from={data_od}&to={dzisiaj}"

@@ -11,7 +11,7 @@ class NewsMergePipeline:
         self.dodano_nowe_dane = False 
         
         if os.path.exists(self.nazwa_pliku):
-            with open(self.nazwa_pliku, mode='r', encoding='utf-8-sig') as plik_csv:
+            with open(self.nazwa_pliku, mode='r', encoding='utf-8') as plik_csv:
                 reader = csv.DictReader(plik_csv)
                 for wiersz in reader:
                     self.wszystkie_dane[wiersz['link']] = wiersz
@@ -34,16 +34,16 @@ class NewsMergePipeline:
 
     def close_spider(self, spider):
         if not self.wszystkie_dane or not self.dodano_nowe_dane:
-            spider.logger.info(f"Pająk '{spider.name}' pominął Rurociąg Prasowy (brak artykułów).")
+            spider.logger.info(f"{spider.name}' - brak artykułów")
             return
 
         dane_do_zapisu = list(self.wszystkie_dane.values())
         dane_do_zapisu.sort(key=lambda x: x.get('data', ''), reverse=True) 
         
         pola = ['data', 'zrodlo', 'tytul', 'tresc', 'link']
-        with open(self.nazwa_pliku, mode='w', newline='', encoding='utf-8-sig') as plik_csv:
+        with open(self.nazwa_pliku, mode='w', newline='', encoding='utf-8') as plik_csv:
             writer = csv.DictWriter(plik_csv, fieldnames=pola, quoting=csv.QUOTE_ALL)
             writer.writeheader()
             writer.writerows(dane_do_zapisu)
             
-        spider.logger.info(f"Pipeline Prasowy zakończył pracę. Baza: {len(dane_do_zapisu)} artykułów.")
+        spider.logger.info(f"Pipeline zakończył pracę. Baza: {len(dane_do_zapisu)} artykułów.")

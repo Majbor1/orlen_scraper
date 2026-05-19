@@ -45,14 +45,14 @@ class CenaMaxMpSpider(scrapy.Spider):
 
     async def parse_lista(self, response):
         page = response.meta["playwright_page"]
-        self.logger.info("Skanuję tabelę w poszukiwaniu dokumentów...")
+        self.logger.info("Skanowanie tabeli")
         
         xpath_pdf = "//tr[td[a[contains(text(), 'maksymalnej ceny paliw')]]]//a[img[contains(@src, 'file_pdf')]]/@href"
         linki_pdf = response.xpath(xpath_pdf).getall()
         await page.close()
 
         if linki_pdf:
-            self.logger.info(f"Znalazłem {len(linki_pdf)} linków. Zaczynam sprawdzanie...")
+            self.logger.info(f"Ilość linków - {len(linki_pdf)} linków.")
             
             # Wymuszamy kolejność! Priority sprawia, że pobierze najpierw dokument z samej góry
             for idx, link in enumerate(linki_pdf):
@@ -100,7 +100,7 @@ class CenaMaxMpSpider(scrapy.Spider):
         data_wejscia = (data_obwieszczenia + timedelta(days=1)).strftime("%Y-%m-%d")
 
         if data_wejscia in self.zapisane_daty:
-            self.logger.info(f"Znalazłem zarchiwizowaną datę ({data_wejscia}). PRZERYWAM pobieranie starszych plików!")
+            self.logger.info(f"Znalazłem zarchiwizowaną datę ({data_wejscia}). ")
             raise CloseSpider(reason='Baza aktualna')
 
         plik_jest_pusty = not os.path.isfile(self.plik_csv) or os.path.getsize(self.plik_csv) == 0
@@ -114,7 +114,7 @@ class CenaMaxMpSpider(scrapy.Spider):
         self.logger.info(f"ZAPISANO NOWĄ CENĘ MAX: {data_wejscia}")
 
     def closed(self, reason):
-        self.logger.info(f"🛠️ Pająk zakończył pracę (Powód: {reason}). Odpalam moduł kalendarza...")
+        
         
         if not os.path.exists(self.plik_csv):
             os._exit(0)
@@ -135,7 +135,7 @@ class CenaMaxMpSpider(scrapy.Spider):
             df['data'] = df['data'].dt.strftime('%Y-%m-%d')
             df.to_csv(self.plik_csv, index=False)
 
-            self.logger.info(f"KALENDARZ NAPRAWIONY! Baza ma {len(df)} dni ciągłej historii.")
+            self.logger.info(f"Baza ma {len(df)} dni.")
         except Exception as e:
             self.logger.error(f"Wystąpił błąd podczas naprawy pliku CSV: {e}")
         finally:
