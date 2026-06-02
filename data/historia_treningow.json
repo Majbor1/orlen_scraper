@@ -1,5 +1,51 @@
 [
     {
+        "data_treningu": "2026-06-02 12:54:21",
+        "wyniki": {
+            "ONEkodiesel": {
+                "mae": 351.85,
+                "prognoza_na_jutro": 5594.72,
+                "wplyw_cech": {
+                    "cena_dzis": 64.1,
+                    "cena_wczoraj": 22.7,
+                    "cena_3_dni_temu": 5.9,
+                    "panika_ai": 0.2,
+                    "sukces_ai": 0.2,
+                    "ropa_brent_usd": 5.4,
+                    "usd_pln": 1.4
+                }
+            },
+            "Pb98": {
+                "mae": 164.33,
+                "prognoza_na_jutro": 5793.49,
+                "wplyw_cech": {
+                    "cena_dzis": 32.5,
+                    "cena_wczoraj": 29.8,
+                    "cena_3_dni_temu": 10.1,
+                    "szum_medialny": 0.1,
+                    "panika_ai": 0.2,
+                    "sukces_ai": 0.2,
+                    "ropa_brent_usd": 23.7,
+                    "usd_pln": 3.4
+                }
+            },
+            "Pb95": {
+                "mae": 160.35,
+                "prognoza_na_jutro": 5288.46,
+                "wplyw_cech": {
+                    "cena_dzis": 33.0,
+                    "cena_wczoraj": 29.4,
+                    "cena_3_dni_temu": 10.0,
+                    "szum_medialny": 0.1,
+                    "panika_ai": 0.2,
+                    "sukces_ai": 0.2,
+                    "ropa_brent_usd": 23.6,
+                    "usd_pln": 3.4
+                }
+            }
+        }
+    },
+    {
         "data_treningu": "2026-06-01 21:45:25",
         "wyniki": {
             "ONEkodiesel": {
