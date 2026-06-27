@@ -1,8 +1,6 @@
 import pandas as pd
 import re
 
-print("🧹 Uruchamiam proces czyszczenia bazy danych...\n")
-
 plik_wejsciowy = 'data/wiadomosci_orlen_zestawienie.csv'
 plik_wyjsciowy = 'data/wiadomosci_orlen_CZYSTE.csv'
 
@@ -46,4 +44,4 @@ print(f"💎 Zostało: {len(df_czyste)} czystych, merytorycznych artykułów.")
 
 
 df_czyste.to_csv(plik_wyjsciowy, index=False, encoding='utf-8-sig', quoting=1) 
-print(f"\n✅ Zapisano czystą bazę do pliku: {plik_wyjsciowy}")
+print(f"\nZapisano czystą bazę do pliku: {plik_wyjsciowy}")

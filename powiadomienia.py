@@ -150,7 +150,7 @@ def wyslij_push():
         payload = {
             "token": APP_TOKEN,
             "user": key,
-            "title": f"📊 {rekomendacja_ogolna} | {dzis_str}",
+            "title": f"{rekomendacja_ogolna} | {dzis_str}",
             "message": wiadomosc_html,
             "html": 1, 
             "url": URL_STRONY, 

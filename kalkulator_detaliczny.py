@@ -3,7 +3,6 @@ import os
 import numpy as np
 
 def uruchom_kalkulator(marza_pb95=0.15, marza_on=0.15):
-    print("🧮 Uruchamiam Profesjonalny Kalkulator Detaliczny...")
     KOSZTY_OPERACYJNE_NETTO = 0.40 
 
 
@@ -12,7 +11,7 @@ def uruchom_kalkulator(marza_pb95=0.15, marza_on=0.15):
     plik_wynik = 'data/ceny_na_stacjach.csv'
 
     if not os.path.exists(plik_hurt):
-        print(f"❌ Brak pliku z cenami hurtowymi!")
+        print(f"Brak pliku z cenami hurtowymi!")
         return
 
     df = pd.read_csv(plik_hurt)
@@ -51,14 +50,14 @@ def uruchom_kalkulator(marza_pb95=0.15, marza_on=0.15):
     df_wynik['data'] = df_wynik['data'].dt.strftime('%Y-%m-%d')
     df_wynik.to_csv(plik_wynik, index=False)
     
-    print(f"✅ Kalkulacja zakończona! Wyniki w: {plik_wynik}")
+    print(f"Kalkulacja zakończona! Wyniki w: {plik_wynik}")
     
     ostatnia_data = df_wynik['data'].max() 
     dzisiejsze_ceny = df_wynik[df_wynik['data'] == ostatnia_data]
     print(f"\n--- PODGLĄD CEN NA DZIEŃ {ostatnia_data} ---")
     for index, row in dzisiejsze_ceny.iterrows():
         cena_max_str = f"(Max wg. rządu: {row['minister_max']} zł)" if pd.notna(row['minister_max']) else "(Brak limitu)"
-        print(f"⛽ {row['paliwo'].ljust(12)}: {row['pylon']} PLN/l  {cena_max_str}")
+        print(f" {row['paliwo'].ljust(12)}: {row['pylon']} PLN/l  {cena_max_str}")
     print("----------------------------------------------------------\n")
 
 if __name__ == "__main__":

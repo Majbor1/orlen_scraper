@@ -16,19 +16,18 @@ if not klucze_api:
 
 client = genai.Client(api_key=klucze_api[0])
 
-print("🤖 Uruchamiam zoptymalizowaną analizę AI (Grupowanie wiadomości)...")
 
 plik_czyste = 'data/wiadomosci_orlen_CZYSTE.csv'
 plik_ocenione = 'data/wiadomosci_orlen_Ocenione_AI.csv'
 
 try:
-    df_nowe = pd.read_csv(plik_czyste, encoding='utf-8-sig')
+    df_nowe = pd.read_csv(plik_czyste, encoding='utf-8')
 except FileNotFoundError:
-    print("❌ Brak pliku z czystymi artykułami.")
+    print("Brak pliku")
     exit()
 
 if os.path.exists(plik_ocenione):
-    df_historia = pd.read_csv(plik_ocenione, encoding='utf-8-sig')
+    df_historia = pd.read_csv(plik_ocenione, encoding='utf-8')
     ocenione_linki = df_historia['link'].tolist()
 else:
     df_historia = pd.DataFrame()
@@ -37,7 +36,7 @@ else:
 df_do_oceny = df_nowe[~df_nowe['link'].isin(ocenione_linki)].copy()
 
 if len(df_do_oceny) == 0:
-    print("✅ Baza AI jest aktualna!")
+    print("Baza AI jest aktualna!")
     if not df_historia.empty and 'data' in df_historia.columns:
         df_historia['data'] = pd.to_datetime(df_historia['data'], errors='coerce')
         df_historia = df_historia.sort_values(by='data', ascending=False)
@@ -94,11 +93,11 @@ for paczka in paczki:
         df_historia['data'] = df_historia['data'].dt.strftime('%Y-%m-%d')
         df_historia = df_historia.reset_index(drop=True)
         
-        df_historia.to_csv(plik_ocenione, index=False, encoding='utf-8-sig')
+        df_historia.to_csv(plik_ocenione, index=False, encoding='utf-8')
         time.sleep(4) 
         
     except Exception as e:
-        print(f"⚠️ Błąd przy paczce (Pominięto, sprawdź logi): {e}")
+        print(f"Błąd przy paczce (Pominięto, sprawdź logi): {e}")
         time.sleep(10)
 
-print("\n✅ Przetwarzanie zakończone!")
+print("\nPrzetwarzanie zakończone!")

@@ -1,10 +1,8 @@
 import pandas as pd
 import numpy as np
 
-print("🚀 Buduję Inteligentną Tabelę Mistrzowską (AI + Giełda + Paliwa)...")
-
 try:
-    df_ai = pd.read_csv('data/wiadomosci_orlen_Ocenione_AI.csv', encoding='utf-8-sig')
+    df_ai = pd.read_csv('data/wiadomosci_orlen_Ocenione_AI.csv', encoding='utf-8')
     df_gielda = pd.read_csv('data/dane_gieldowe.csv')
     df_ceny = pd.read_csv('data/ceny_orlen_zestawienie.csv')
 except FileNotFoundError as e:
@@ -55,4 +53,4 @@ najstarszy_news = df_ai['data'].min()
 master = master[master['data'] >= najstarszy_news]
 
 master.to_csv('data/orlen_master_table.csv', index=False, encoding='utf-8-sig')
-print(f"✅ Sukces! Tabela Mistrzowska gotowa. Liczba rekordów: {len(master)}")
+print(f"Liczba rekordów: {len(master)}")

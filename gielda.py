@@ -5,7 +5,6 @@ from datetime import datetime, timedelta
 
 def pobierz_dane_gieldowe():
     nazwa_pliku = 'data/dane_gieldowe.csv'
-    print("Aktualizacja giełdy z zasadą ciągłości")
 
     koniec = datetime.now()
     start = koniec - timedelta(days=7)
@@ -40,7 +39,7 @@ def pobierz_dane_gieldowe():
 
     df_final = df_final.sort_values('data', ascending=False)
     df_final.to_csv(nazwa_pliku, index=False)
-    print(f"✅ Giełda zaktualizowana (brakujące dni uzupełnione).")
+    print(f"Giełda zaktualizowana ")
 
 if __name__ == "__main__":
     pobierz_dane_gieldowe()
