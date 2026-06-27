@@ -2,7 +2,7 @@ name: Orlen AI Bot Automation
 
 on:
   schedule:
-    - cron: '0 9,18 * * *'
+    - cron: '0 12 * * *'
   workflow_dispatch: 
 jobs:
   build:
@@ -41,7 +41,7 @@ jobs:
           python ocena_ai.py
           python buduj_tabele.py
           python trenuj_model.py
-          python powiadomienia.py
+          
 
       - name: Commit and push changes
         run: |
